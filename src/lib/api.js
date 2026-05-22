@@ -1,0 +1,57 @@
+// Client calls to the /api/generate-meals serverless proxy.
+// The Anthropic key never lives here — the proxy holds it. This module only
+// attaches the shared secret so casual bots can't drive the endpoint.
+
+const APP_SECRET = import.meta.env.VITE_APP_SECRET || "";
+
+async function callApi(payload) {
+  let res;
+  try {
+    res = await fetch("/api/generate-meals", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-app-secret": APP_SECRET,
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (e) {
+    throw new Error(`Network error: ${e.message}`);
+  }
+
+  let data;
+  try {
+    data = await res.json();
+  } catch {
+    throw new Error(`Server returned a non-JSON response (${res.status}).`);
+  }
+
+  if (!res.ok) {
+    throw new Error(data?.error || `Request failed (${res.status}).`);
+  }
+  return data;
+}
+
+// Generate one day's 4 meals (breakfast, lunch, dinner, snack).
+export async function generateDay(day, settings, allowLongCook, existingNames) {
+  const { meals } = await callApi({
+    mode: "day",
+    day,
+    settings,
+    allowLongCook,
+    existingNames,
+  });
+  return meals;
+}
+
+// Regenerate a single meal for one slot.
+export async function regenerateMeal(day, slot, settings, existingNames) {
+  const { meal } = await callApi({
+    mode: "meal",
+    day,
+    slot,
+    settings,
+    existingNames,
+  });
+  return meal;
+}
