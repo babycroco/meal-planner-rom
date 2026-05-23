@@ -21,6 +21,7 @@ import { generateDay, regenerateMeal as apiRegenerateMeal } from "./lib/api";
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const SLOTS = ["breakfast", "lunch", "dinner", "snack"];
 const SLOT_LABELS = { breakfast: "Breakfast", lunch: "Lunch", dinner: "Dinner", snack: "Snack" };
+const ROMAN = ["i", "ii", "iii", "iv"];
 
 const DEFAULT_SETTINGS = {
   kcalTarget: 2000,
@@ -50,6 +51,14 @@ const TIME_COLORS = {
   "15": "#a9802a",
   "30": "#bd6a2e",
   "60": "#a8442f",
+};
+
+// Light tints of the time colors — used as chip backgrounds.
+const TIME_BG = {
+  "5": "#e6ede0",
+  "15": "#f1e6c8",
+  "30": "#f3ddc8",
+  "60": "#f0d8cb",
 };
 
 export default function App() {
@@ -201,6 +210,11 @@ export default function App() {
           <div>
             <div className="text-[11px] tracking-[0.3em] uppercase mb-2" style={{ color: "var(--ink-faint)" }}>Week 01 · Cut</div>
             <h1 className="serif text-5xl md:text-6xl font-semibold leading-none" style={{ color: "var(--ink)", letterSpacing: "-0.015em" }}>The <span className="italic">Menu</span></h1>
+            <div className="flex items-center gap-3 mt-4 max-w-[260px]" style={{ color: "var(--gold-ink)" }}>
+              <span className="h-px flex-1" style={{ background: "currentColor", opacity: 0.5 }} />
+              <span className="text-base leading-none">✦</span>
+              <span className="h-px flex-1" style={{ background: "currentColor", opacity: 0.5 }} />
+            </div>
           </div>
           <button onClick={() => setShowSettings(true)} className="p-2 hover:opacity-60 transition" style={{ color: "var(--ink-soft)" }}>
             <Settings size={20} />
@@ -208,7 +222,7 @@ export default function App() {
         </header>
 
         {error && (
-          <div className="mb-6 p-4 flex items-start gap-3 fade-in" style={{ background: "#f6e3da", border: "1px solid #e3b9a6" }}>
+          <div className="mb-6 p-4 flex items-start gap-3 fade-in bevel" style={{ background: "#f6e3da", border: "1px solid #e3b9a6" }}>
             <AlertCircle size={18} style={{ color: "#a8442f", flexShrink: 0, marginTop: 2 }} />
             <div className="flex-1 text-sm" style={{ color: "#a8442f" }}>{error}</div>
             <button onClick={() => setError(null)} style={{ color: "#a8442f" }}><X size={16} /></button>
@@ -216,7 +230,7 @@ export default function App() {
         )}
 
         {hasMeals && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-px mb-8 fade-in" style={{ background: "var(--line)" }}>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-px mb-8 fade-in bevel" style={{ background: "var(--line)" }}>
             <div className="p-5" style={{ background: "var(--card)" }}>
               <div className="text-[10px] tracking-[0.22em] uppercase mb-2" style={{ color: "var(--ink-faint)" }}>Avg kcal · day</div>
               <div className="text-3xl font-bold tabular-nums" style={{ color: "var(--ink)" }}>{Math.round(totalKcal / 7)}</div>
@@ -241,22 +255,22 @@ export default function App() {
         )}
 
         <div className="flex flex-wrap gap-3 mb-8">
-          <button onClick={generateWeek} disabled={loading} className="px-6 py-3 flex items-center gap-2 transition disabled:opacity-50 hover:opacity-90 font-semibold" style={btnPrimary}>
+          <button onClick={generateWeek} disabled={loading} className="px-6 py-3 flex items-center gap-2 transition disabled:opacity-50 hover:opacity-90 font-semibold bevel" style={btnPrimary}>
             {loading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
             {hasMeals ? "Regenerate Week" : "Generate Week"}
           </button>
           {hasMeals && (
-            <button onClick={buildGroceryList} className="px-6 py-3 flex items-center gap-2 transition hover:opacity-80" style={btnSecondary}>
+            <button onClick={buildGroceryList} className="px-6 py-3 flex items-center gap-2 transition hover:opacity-80 bevel" style={btnSecondary}>
               <ShoppingCart size={16} />
               Grocery List
             </button>
           )}
-          <button onClick={() => { setTransferMode(hasMeals ? "export" : "import"); setTransferOpen(true); }} className="px-6 py-3 flex items-center gap-2 transition hover:opacity-80" style={btnSecondary}>
+          <button onClick={() => { setTransferMode(hasMeals ? "export" : "import"); setTransferOpen(true); }} className="px-6 py-3 flex items-center gap-2 transition hover:opacity-80 bevel" style={btnSecondary}>
             <Share2 size={16} />
             Sync
           </button>
           {hasMeals && (
-            <div className="flex ml-auto" style={{ border: "1px solid var(--line)" }}>
+            <div className="flex ml-auto bevel" style={{ border: "1px solid var(--line)" }}>
               <button onClick={() => setView("plan")} className="px-4 py-3 text-xs tracking-[0.2em] uppercase transition" style={{ background: view === "plan" ? "var(--gold)" : "transparent", color: view === "plan" ? "var(--ink)" : "var(--ink-soft)" }}>Plan</button>
               <button onClick={() => setView("grocery")} disabled={!grocery} className="px-4 py-3 text-xs tracking-[0.2em] uppercase transition disabled:opacity-30" style={{ background: view === "grocery" ? "var(--gold)" : "transparent", color: view === "grocery" ? "var(--ink)" : "var(--ink-soft)" }}>Cart</button>
             </div>
@@ -280,9 +294,9 @@ export default function App() {
         )}
 
         {view === "plan" && hasMeals && (
-          <div className="space-y-px" style={{ background: "var(--line)" }}>
+          <div className="space-y-3">
             {DAYS.map((day, di) => (
-              <div key={day} className="flex flex-col md:flex-row gap-px fade-in" style={{ background: "var(--line)", animationDelay: `${di * 55}ms` }}>
+              <div key={day} className="flex flex-col md:flex-row gap-px fade-in bevel" style={{ background: "var(--line)", animationDelay: `${di * 55}ms` }}>
                 <div className="md:w-48 shrink-0 p-4 flex md:flex-col justify-between md:justify-start" style={{ background: "var(--card)" }}>
                   <div>
                     <div className="text-[10px] tracking-[0.28em] uppercase" style={{ color: "var(--ink-faint)" }}>Day 0{di + 1}</div>
@@ -295,16 +309,19 @@ export default function App() {
                   </div>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-px flex-1" style={{ background: "var(--line)" }}>
-                {SLOTS.map(slot => {
+                {SLOTS.map((slot, si) => {
                   const k = `${day}-${slot}`;
                   const m = meals[k];
                   const isRegen = regenKey === k;
                   return (
                     <button key={k} onClick={() => m && setActiveMeal(k)} className="p-4 text-left transition hover:bg-[#ebe3d0] relative group" style={{ background: "var(--card)" }}>
                       <div className="flex items-center justify-between mb-2">
-                        <div className="text-[10px] tracking-[0.22em] uppercase" style={{ color: "var(--ink-faint)" }}>{SLOT_LABELS[slot]}</div>
+                        <div className="text-[10px] tracking-[0.22em] uppercase flex items-baseline gap-1.5" style={{ color: "var(--ink-faint)" }}>
+                          <span className="serif italic" style={{ color: "var(--gold-ink)", textTransform: "none", letterSpacing: 0 }}>{ROMAN[si]}</span>
+                          <span>{SLOT_LABELS[slot]}</span>
+                        </div>
                         {m?.prep_time && (
-                          <div className="flex items-center gap-1 text-[10px] tabular-nums" style={{ color: TIME_COLORS[m.prep_time] }}>
+                          <div className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 tabular-nums" style={{ color: TIME_COLORS[m.prep_time], background: TIME_BG[m.prep_time] }}>
                             <Clock size={9} />
                             {TIME_LABELS[m.prep_time]}
                           </div>
@@ -338,17 +355,18 @@ export default function App() {
         )}
 
         {view === "grocery" && grocery?.recipes && (
-          <div className="fade-in">
+          <div className="fade-in space-y-4">
             {grocery.recipes.map(recipe => {
               const totalItems = recipe.ingredients.length;
               const checkedCount = recipe.ingredients.filter((_, i) => checked[`${recipe.key}-${i}`]).length;
               const allDone = checkedCount === totalItems && totalItems > 0;
               return (
-                <div key={recipe.key} className="mb-10" style={{ opacity: allDone ? 0.45 : 1, transition: "opacity 0.3s" }}>
+                <div key={recipe.key} className="p-5 bevel" style={{ background: "var(--card)", opacity: allDone ? 0.5 : 1, transition: "opacity 0.3s" }}>
                   <div className="flex items-baseline justify-between gap-4 mb-4 pb-2" style={{ borderBottom: "1px solid var(--line)" }}>
                     <div className="flex items-baseline gap-3 min-w-0 flex-1">
-                      <h3 className="text-xs tracking-[0.28em] uppercase flex-shrink-0" style={{ color: "var(--gold-ink)" }}>
-                        {recipe.day} · {SLOT_LABELS[recipe.slot]}
+                      <h3 className="text-xs tracking-[0.28em] uppercase flex-shrink-0 flex items-baseline gap-1.5" style={{ color: "var(--gold-ink)" }}>
+                        <span className="serif italic" style={{ textTransform: "none", letterSpacing: 0 }}>{ROMAN[SLOTS.indexOf(recipe.slot)]}</span>
+                        <span>{recipe.day} · {SLOT_LABELS[recipe.slot]}</span>
                       </h3>
                       <div className="serif text-[15px] truncate" style={{ color: "var(--ink)" }}>{recipe.name}</div>
                     </div>
@@ -379,14 +397,17 @@ export default function App() {
 
         {activeMeal && meals[activeMeal] && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "var(--scrim)" }} onClick={() => setActiveMeal(null)}>
-            <div className="max-w-2xl w-full max-h-[85vh] overflow-y-auto fade-in" style={{ background: "var(--card)", border: "1px solid var(--line)" }} onClick={e => e.stopPropagation()}>
+            <div className="max-w-2xl w-full max-h-[85vh] overflow-y-auto fade-in bevel" style={{ background: "var(--card)", border: "1px solid var(--line)" }} onClick={e => e.stopPropagation()}>
               <div className="p-8">
                 <div className="flex justify-between items-start mb-6">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
-                      <div className="text-[10px] tracking-[0.28em] uppercase" style={{ color: "var(--gold-ink)" }}>{activeMeal.replace("-", " · ")}</div>
+                      <div className="text-[10px] tracking-[0.28em] uppercase flex items-baseline gap-1.5" style={{ color: "var(--gold-ink)" }}>
+                        <span className="serif italic" style={{ textTransform: "none", letterSpacing: 0 }}>{ROMAN[SLOTS.indexOf(activeMeal.split("-")[1])]}</span>
+                        <span>{activeMeal.replace("-", " · ")}</span>
+                      </div>
                       {meals[activeMeal].prep_time && (
-                        <div className="flex items-center gap-1 text-[10px] px-2 py-0.5 tabular-nums" style={{ color: TIME_COLORS[meals[activeMeal].prep_time], border: `1px solid ${TIME_COLORS[meals[activeMeal].prep_time]}` }}>
+                        <div className="flex items-center gap-1 text-[10px] px-2 py-0.5 tabular-nums" style={{ color: TIME_COLORS[meals[activeMeal].prep_time], background: TIME_BG[meals[activeMeal].prep_time] }}>
                           <Clock size={9} />
                           {TIME_LABELS[meals[activeMeal].prep_time]}
                         </div>
@@ -424,7 +445,7 @@ export default function App() {
 
         {transferOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "var(--scrim)" }} onClick={() => setTransferOpen(false)}>
-            <div className="max-w-lg w-full max-h-[90vh] overflow-y-auto fade-in" style={{ background: "var(--card)", border: "1px solid var(--line)" }} onClick={e => e.stopPropagation()}>
+            <div className="max-w-lg w-full max-h-[90vh] overflow-y-auto fade-in bevel" style={{ background: "var(--card)", border: "1px solid var(--line)" }} onClick={e => e.stopPropagation()}>
               <div className="p-8">
                 <div className="flex justify-between items-center mb-6">
                   <h2 className="serif text-2xl font-semibold" style={{ color: "var(--ink)" }}>Sync</h2>
@@ -442,8 +463,8 @@ export default function App() {
                       </p>
                       <textarea readOnly value={exportPayload()} onClick={selectAllInTextarea} onFocus={selectAllInTextarea} className="w-full p-3 text-xs font-mono mb-3" style={{ background: "var(--field)", color: "var(--ink-soft)", border: "1px solid var(--line)", height: "120px", resize: "none", wordBreak: "break-all" }} />
                       <div className="flex gap-2">
-                        <button onClick={(e) => { const ta = e.currentTarget.parentElement.parentElement.querySelector("textarea"); if (ta) selectAllInTextarea({ target: ta }); }} className="flex-1 px-4 py-3 text-xs tracking-[0.2em] uppercase transition hover:opacity-80" style={btnSecondary}>Select All</button>
-                        <button onClick={handleCopy} className="flex-1 px-4 py-3 flex items-center justify-center gap-2 transition hover:opacity-90 font-semibold" style={btnPrimary}>
+                        <button onClick={(e) => { const ta = e.currentTarget.parentElement.parentElement.querySelector("textarea"); if (ta) selectAllInTextarea({ target: ta }); }} className="flex-1 px-4 py-3 text-xs tracking-[0.2em] uppercase transition hover:opacity-80 bevel" style={btnSecondary}>Select All</button>
+                        <button onClick={handleCopy} className="flex-1 px-4 py-3 flex items-center justify-center gap-2 transition hover:opacity-90 font-semibold bevel" style={btnPrimary}>
                           {copyOk ? <><Check size={14} /> Copied</> : <><Share2 size={14} /> Copy code</>}
                         </button>
                       </div>
@@ -456,7 +477,7 @@ export default function App() {
                   <>
                     <p className="text-sm mb-4 leading-relaxed" style={{ color: "var(--ink-soft)" }}>Paste a plan code from your other device, then Import. This replaces the plan currently on this device.</p>
                     <textarea value={importText} onChange={e => setImportText(e.target.value)} placeholder="Paste plan code…" className="w-full p-3 text-xs font-mono mb-4" style={{ background: "var(--field)", color: "var(--ink)", border: "1px solid var(--line)", height: "120px", resize: "none", wordBreak: "break-all" }} />
-                    <button onClick={handleImport} disabled={!importText.trim()} className="w-full px-6 py-3 flex items-center justify-center gap-2 transition disabled:opacity-30 font-semibold" style={btnPrimary}>
+                    <button onClick={handleImport} disabled={!importText.trim()} className="w-full px-6 py-3 flex items-center justify-center gap-2 transition disabled:opacity-30 font-semibold bevel" style={btnPrimary}>
                       <Download size={16} /> Import Plan
                     </button>
                   </>
@@ -468,7 +489,7 @@ export default function App() {
 
         {showSettings && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "var(--scrim)" }} onClick={() => setShowSettings(false)}>
-            <div className="max-w-md w-full max-h-[90vh] overflow-y-auto fade-in" style={{ background: "var(--card)", border: "1px solid var(--line)" }} onClick={e => e.stopPropagation()}>
+            <div className="max-w-md w-full max-h-[90vh] overflow-y-auto fade-in bevel" style={{ background: "var(--card)", border: "1px solid var(--line)" }} onClick={e => e.stopPropagation()}>
               <div className="p-8">
                 <div className="flex justify-between items-center mb-6">
                   <h2 className="serif text-2xl font-semibold" style={{ color: "var(--ink)" }}>Settings</h2>

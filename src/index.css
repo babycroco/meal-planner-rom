@@ -39,6 +39,21 @@ body {
   font-family: var(--serif);
 }
 
+/* Chamfered (45° clipped) corners. Apply to any rectangle that should read as
+   a discrete, art-deco-menu plaque. Cutouts show the parent's background. */
+.bevel {
+  clip-path: polygon(
+    10px 0,
+    calc(100% - 10px) 0,
+    100% 10px,
+    100% calc(100% - 10px),
+    calc(100% - 10px) 100%,
+    10px 100%,
+    0 calc(100% - 10px),
+    0 10px
+  );
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;
