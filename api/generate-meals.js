@@ -22,11 +22,11 @@ PRIORITIES, in order:
 2. Stay close to the calorie target.
 3. Respect the prep-time constraint given for each meal.
 
-INGREDIENT RULES:
-- Use standard German supermarket items (Rewe/Edeka). ALWAYS write the ingredient name in GERMAN — never the English equivalent. The grocery list deduplicates by exact name, so any English/German mix creates duplicate rows.
-- Canonical names you MUST use (never the English form): Banane (not Banana), Hähnchenbrust (not Chicken Breast), Hähnchenschenkel (not Chicken Thigh), Putenbrust (not Turkey), Lachsfilet (not Salmon Fillet), Rindfleisch (not Beef), Lammhackfleisch (not Lamb Mince), Thunfisch (not Tuna), Hüttenkäse (not Cottage Cheese), Eier (not Eggs), Eiweiß (not Egg Whites), Milch (not Milk), Griechischer Joghurt (not Greek Yogurt), Linsen (not Lentils), Kichererbsen (not Chickpeas), Haferflocken (not Oats), Vollkornbrot (not Whole Grain Bread), Eiweißbrot (not Protein Bread), Walnüsse (not Walnuts), Mandeln (not Almonds), Erdnussbutter (not Peanut Butter), Mandelbutter (not Almond Butter), Honig (not Honey), Sojasauce (not Soy Sauce), Olivenöl (not Olive Oil), Gurke (not Cucumber), Knoblauch (not Garlic), Ingwer (not Ginger), Petersilie (not Parsley), Zitronensaft (not Lemon Juice), Zitrone (not Lemon), Paprika (not Bell Pepper), Tomate (not Tomato), Kirschtomaten (not Cherry Tomatoes), Frühlingszwiebeln (not Spring Onions/Scallions), Rote Zwiebel (not Red Onion), Babyspinat (not Baby Spinach), Spinat (not Spinach), Brokkoli (not Broccoli), Karotte (not Carrot), Kürbiskerne (not Pumpkin Seeds), Sobanudeln (not Soba Noodles), Jasminreis (not Jasmine Rice), Reis (not Rice). Skyr, Magerquark, Bulgur, Hummus, Tofu, Feta, Mango, Avocado, Zucchini, Mozzarella, Pak Choi, Edamame are spelled the same in both languages — use them as-is.
-- Use the EXACT same name for an ingredient across every meal in the entire week. Do not vary between equivalent terms (no "Skyr" in one meal and "Skyr (Natur)" in another).
-- NEVER add parenthetical clarifications to ingredient names. Write "Hähnchenbrust" — never "Hähnchenbrust (Pre-Cooked)", "Hähnchenbrust (Sliced)", "Hähnchenbrust (Rotisserie)", "Mango (Gefroren)", "Ingwer (Frisch)", "Paprika (Rot und Gelb)". Parentheticals create unwanted duplicate rows on the grocery list.
+INGREDIENT RULES (strict — the grocery list dedups by exact name+unit, so any drift creates duplicate rows):
+- Use standard German supermarket items (Rewe/Edeka). ALWAYS write the ingredient name in GERMAN — never the English equivalent.
+- Canonical names you MUST use (never the English form): Banane (not Banana), Hähnchenbrust (not Chicken Breast), Hähnchenschenkel (not Chicken Thigh), Putenbrust (not Turkey), Lachsfilet (not Salmon Fillet), Rindfleisch (not Beef), Lammhackfleisch (not Lamb Mince), Thunfisch (not Tuna or "Tuna In Water"), Hüttenkäse (not Cottage Cheese), Eier (not Eggs), Eiweiß (not Egg Whites), Milch (not Milk), Griechischer Joghurt (not Greek Yogurt), Linsen (not Lentils), Beluga-Linsen (not Beluga Lentils), Kichererbsen (not Chickpeas or Canned Chickpeas), Haferflocken (not Oats), Vollkornbrot (not Whole Grain Bread), Eiweißbrot (not Protein Bread), Vollkorn-Tortilla (not Whole Wheat Tortilla or "Wraps"), Walnüsse (not Walnuts), Mandeln (not Almonds), Erdnussbutter (not Peanut Butter), Mandelbutter (not Almond Butter), Honig (not Honey), Sojasauce (not Soy Sauce, and never "Sojasoße"), Olivenöl (not Olive Oil), Sesamöl (not Sesame Oil), Gurke (not Cucumber), Knoblauch (not Garlic), Ingwer (not Ginger), Petersilie (not Parsley), Zitronensaft (not Lemon Juice), Zitrone (not Lemon), Paprika (not Bell Pepper), Tomate (not Tomato), Tomatenstücke (not Chopped Tomatoes or Canned Chopped Tomatoes), Kirschtomaten (not Cherry Tomatoes), Frühlingszwiebeln (not Spring Onions/Scallions), Rote Zwiebel (not Red Onion), Babyspinat (not Baby Spinach), Spinat (not Spinach), Brokkoli (not Broccoli), Karotte (not Carrot), Kürbiskerne (not Pumpkin Seeds), Sobanudeln (not Soba Noodles), Jasminreis (not Jasmine Rice), Reis (not Rice or Cooked Rice), Ananas (not Pineapple or Pineapple Chunks), Beerenmischung (not Mixed Berries or Frozen Mixed Berries), Chia-Samen (not Chia Seeds), Backpulver (not Baking Powder), Salz (not Salt), Pfeffer (not Pepper or Black Pepper), Kreuzkümmel (not Cumin or Ground Cumin). Skyr, Magerquark, Bulgur, Hummus, Tofu, Feta, Mango, Avocado, Zucchini, Mozzarella, Pak Choi, Edamame, Ras El Hanout are spelled the same in both languages — use them as-is.
+- NEVER add modifiers, prep-state descriptors, or qualifying phrases to ingredient names. Banned in every form: "Canned ...", "Frozen ...", "Cooked ...", "Fresh ...", "Raw ...", "Ground ...", "Tiefkühl-...", "Gekochter ...", "Gemahlene ...", "Frische ...", "Getrocknete ...", " Wheat", " Chunks", " Wraps", " Spice Blend", " In Wasser", " In Water", " Aus Der Dose", " Aus Dose", parenthetical anything. Write "Hähnchenbrust" — never "Hähnchenbrust (Pre-Cooked)". Write "Kichererbsen" — never "Kichererbsen aus der Dose". Write "Edamame" — never "Tiefkühl-Edamame". Write "Bulgur" — never "Bulgur Wheat". Write "Ras El Hanout" — never "Ras El Hanout Spice Blend".
+- Use ONE consistent unit per ingredient across the whole week. If a meal uses Honig in tbsp, every other meal using Honig must also use tbsp — do NOT mix tbsp and tsp. Same for Olivenöl, Sojasauce, Ingwer, Frühlingszwiebeln (pick g OR piece, never both), Vollkornbrot (g OR piece, never both).
 - 4-8 ingredients per meal; snacks 2-4.
 - Favor weight-loss-friendly high-protein staples: Hähnchenbrust, Rindfleisch, Lachsfilet, weißer Fisch, Eier, Magerquark, Skyr, Hüttenkäse, Linsen, Tofu.
 
@@ -92,12 +92,15 @@ function slotTargetLines(settings) {
   }).join("\n");
 }
 
-function dayPrompt(day, settings, allowLongCook, existingNames) {
+function dayPrompt(day, settings, allowLongCook, existingNames, existingIngredients = []) {
   const timeRule = allowLongCook
     ? 'TIME CONSTRAINT: At most ONE meal may be prep_time "60", and only dinner. Every other meal must be "5", "15", or "30".'
     : 'TIME CONSTRAINT: NO meal may be prep_time "60". Every meal must be "5", "15", or "30".';
   const avoidRepeats = existingNames.length
     ? `\nDo NOT repeat any of these meals already planned this week: ${existingNames.join(", ")}.`
+    : "";
+  const reuseIngredients = existingIngredients.length
+    ? `\nINGREDIENT CONSISTENCY — STRICT: When this day's meals include any of these ingredients already used earlier in the week, you MUST use the EXACT same name AND the EXACT same unit shown here, character-for-character. Do not substitute equivalents, translate, add modifiers, or change unit. Reused ingredients: ${existingIngredients.join(", ")}.`
     : "";
   return `Generate a full-day meal plan for ${day} — four slots: breakfast, lunch, dinner, snack.
 
@@ -109,7 +112,7 @@ ${slotTargetLines(settings)}
 ${timeRule}
 
 CUISINES: ${settings.cuisines || "any"}.
-AVOID: ${settings.avoid || "nothing"}.${avoidRepeats}
+AVOID: ${settings.avoid || "nothing"}.${avoidRepeats}${reuseIngredients}
 
 Return exactly 4 meals in the "meals" array, in this slot order: breakfast, lunch, dinner, snack.`;
 }
@@ -170,7 +173,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Request body is not valid JSON." });
     }
   }
-  const { mode, day, slot, settings, allowLongCook = false, existingNames = [] } = body || {};
+  const { mode, day, slot, settings, allowLongCook = false, existingNames = [], existingIngredients = [] } = body || {};
 
   if (mode !== "day" && mode !== "meal") {
     return res.status(400).json({ error: "'mode' must be 'day' or 'meal'." });
@@ -185,6 +188,9 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "'slot' must be breakfast, lunch, dinner, or snack." });
   }
   const names = Array.isArray(existingNames) ? existingNames.filter((n) => typeof n === "string") : [];
+  const ingredients = Array.isArray(existingIngredients)
+    ? existingIngredients.filter((n) => typeof n === "string")
+    : [];
 
   const anthropic = new Anthropic({ apiKey });
 
@@ -205,7 +211,7 @@ export default async function handler(req, res) {
           role: "user",
           content:
             mode === "day"
-              ? dayPrompt(day, settings, allowLongCook, names)
+              ? dayPrompt(day, settings, allowLongCook, names, ingredients)
               : mealPrompt(day, slot, settings, names),
         },
       ],

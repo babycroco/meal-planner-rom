@@ -33,13 +33,17 @@ async function callApi(endpoint, payload) {
 }
 
 // Generate one day's 4 meals (breakfast, lunch, dinner, snack).
-export async function generateDay(day, settings, allowLongCook, existingNames) {
+// `existingIngredients` is a list like ["Skyr (g)", "Banane (piece)"] — the
+// LLM is told to reuse these exact names+units when applicable so the
+// grocery list dedups cleanly.
+export async function generateDay(day, settings, allowLongCook, existingNames, existingIngredients = []) {
   const { meals } = await callApi("/api/generate-meals", {
     mode: "day",
     day,
     settings,
     allowLongCook,
     existingNames,
+    existingIngredients,
   });
   return meals;
 }

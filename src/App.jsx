@@ -80,11 +80,31 @@ const TIME_COLORS = {
 // with one of these, so the data is already aisle-sortable at the source.
 const SECTION_ORDER = ["Produce", "Meat & Fish", "Dairy & Eggs", "Pantry", "Frozen", "Bakery", "Other"];
 
-// Curated alias map for grocery-list dedup. Keys are paren-stripped lowercase
+// Modifier prefixes/suffixes the LLM tends to inject ("Canned", "Frozen",
+// "Tiefkühl-", " Spice Blend", " Aus Der Dose", etc.). These get stripped
+// before alias lookup so "Frozen Edamame" and "Tiefkühl-Edamame" both
+// collapse to plain "Edamame".
+const MODIFIER_PREFIXES = [
+  "canned ", "frozen ", "fresh ", "raw ", "dried ", "ground ", "cooked ", "boiled ", "roasted ",
+  "tiefkühl-", "tiefkühl ", "gefroren ", "gefrorene ", "gefrorener ", "gefrorenes ",
+  "frisch ", "frische ", "frischer ", "frisches ",
+  "getrocknet ", "getrocknete ", "getrockneter ", "getrocknetes ",
+  "gekocht ", "gekochte ", "gekochter ", "gekochtes ",
+  "gemahlen ", "gemahlene ", "gemahlener ", "gemahlenes ",
+  "geröstet ", "geröstete ", "gerösteter ", "geröstetes ",
+];
+const MODIFIER_SUFFIXES = [
+  " spice blend", " spice mix", " wraps", " chunks",
+  " in wasser", " in water", " in eigenem saft", " in eigenem öl",
+  " aus der dose", " (aus der dose)",
+  " wheat", " grain", " gemahlen", " ungesalzen", " ungeschält",
+];
+
+// Curated alias map for grocery-list dedup. Keys are stripped-+-lowercased
 // variants; values are the canonical German display name. The LLM is
-// instructed to use German names but occasionally outputs English equivalents
-// or adds parenthetical clarifications like "(Pre-Cooked)" / "(Natur)" — both
-// become duplicate rows without normalization.
+// instructed to use German names but occasionally outputs English equivalents,
+// spelling variants ("Sojasoße"/"Sojasauce"), or modifiers — all collapse
+// here.
 const INGREDIENT_ALIAS = {
   // Produce
   "banana": "Banane",
@@ -226,6 +246,7 @@ const INGREDIENT_ALIAS = {
   "almond butter": "Mandelbutter",
   "mandelbutter": "Mandelbutter",
   "soba noodles": "Sobanudeln",
+  "soba-nudeln": "Sobanudeln",
   "sobanudeln": "Sobanudeln",
   "pumpkin seeds": "Kürbiskerne",
   "kürbiskerne": "Kürbiskerne",
@@ -235,23 +256,110 @@ const INGREDIENT_ALIAS = {
   "tomato paste": "Tomatenmark",
   "tomatenmark": "Tomatenmark",
   "tabbouleh": "Tabbouleh",
+
+  // Items the LLM was emitting as dupes (post-Phase-1-3 cart audit)
+  "sesame oil": "Sesamöl",
+  "sesamöl": "Sesamöl",
+  "soy sauce": "Sojasauce",
+  "sojasoße": "Sojasauce",
+  "sojasauce": "Sojasauce",
+  "soja sauce": "Sojasauce",
+  "bulgur": "Bulgur",
+  "bulgur wheat": "Bulgur",
+  "chickpeas": "Kichererbsen",
+  "canned chickpeas": "Kichererbsen",
+  "kichererbsen": "Kichererbsen",
+  "pineapple": "Ananas",
+  "pineapple chunks": "Ananas",
+  "ananas": "Ananas",
+  "tuna": "Thunfisch",
+  "tuna in water": "Thunfisch",
+  "thunfisch in wasser": "Thunfisch",
+  "thunfisch in eigenem saft": "Thunfisch",
+  "thunfisch": "Thunfisch",
+  "canned tuna": "Thunfisch",
+  "mixed berries": "Beerenmischung",
+  "frozen mixed berries": "Beerenmischung",
+  "beerenmischung": "Beerenmischung",
+  "tiefkühl-beeren": "Beerenmischung",
+  "beeren": "Beerenmischung",
+  "chia seeds": "Chia-Samen",
+  "chia samen": "Chia-Samen",
+  "chia-samen": "Chia-Samen",
+  "chiasamen": "Chia-Samen",
+  "ras el hanout": "Ras El Hanout",
+  "ras-el-hanout": "Ras El Hanout",
+  "kreuzkümmel": "Kreuzkümmel",
+  "cumin": "Kreuzkümmel",
+  "salt": "Salz",
+  "salz": "Salz",
+  "pepper": "Pfeffer",
+  "black pepper": "Pfeffer",
+  "pfeffer": "Pfeffer",
+  "salt and pepper": "Salz und Pfeffer",
+  "salz und pfeffer": "Salz und Pfeffer",
+  "beluga lentils": "Beluga-Linsen",
+  "beluga linsen": "Beluga-Linsen",
+  "beluga-linsen": "Beluga-Linsen",
+  "tortilla": "Vollkorn-Tortilla",
+  "vollkorn-tortilla": "Vollkorn-Tortilla",
+  "whole grain tortilla": "Vollkorn-Tortilla",
+  "whole grain wraps": "Vollkorn-Tortilla",
+  "whole wheat tortilla": "Vollkorn-Tortilla",
+  "whole wheat wraps": "Vollkorn-Tortilla",
+  "vollkornbrot": "Vollkornbrot",
+  "whole grain bread": "Vollkornbrot",
+  "whole wheat bread": "Vollkornbrot",
+  "chopped tomatoes": "Tomatenstücke",
+  "canned chopped tomatoes": "Tomatenstücke",
+  "diced tomatoes": "Tomatenstücke",
+  "tomatenstücke": "Tomatenstücke",
+  "tomato": "Tomate",
+  "tomate": "Tomate",
+  "tomaten": "Tomate",
+  "baking powder": "Backpulver",
+  "backpulver": "Backpulver",
+  "rice": "Reis",
+  "reis": "Reis",
+  "white rice": "Reis",
+  "tofu": "Tofu",
+  "firm tofu": "Tofu",
+  "fester tofu": "Tofu",
+  "räuchertofu": "Tofu",
+  "smoked tofu": "Tofu",
 };
 
-// Strip parenthetical clarifications and collapse whitespace.
-//   "Hähnchenbrust (Pre-Cooked Or Rotisserie)" → "Hähnchenbrust"
-//   "Mango (Gefroren Oder Frisch)" → "Mango"
-function stripParens(s) {
-  return (s || "")
-    .replace(/\s*\([^)]*\)\s*/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+// Strip parenthetical clarifications, prep-state prefixes, ingredient
+// suffixes, and collapse whitespace. Pipeline:
+//   1. Drop everything inside "(...)" — "Hähnchenbrust (Pre-Cooked)" → "Hähnchenbrust"
+//   2. Drop the first matching MODIFIER_PREFIX — "Canned Chickpeas" → "Chickpeas"
+//   3. Drop the first matching MODIFIER_SUFFIX — "Bulgur Wheat" → "Bulgur"
+function stripModifiers(s) {
+  let cleaned = (s || "").replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim();
+  if (!cleaned) return cleaned;
+  const lower = cleaned.toLowerCase();
+  for (const p of MODIFIER_PREFIXES) {
+    if (lower.startsWith(p)) {
+      cleaned = cleaned.slice(p.length).trim();
+      break;
+    }
+  }
+  const lower2 = cleaned.toLowerCase();
+  for (const sfx of MODIFIER_SUFFIXES) {
+    if (lower2.endsWith(sfx)) {
+      cleaned = cleaned.slice(0, cleaned.length - sfx.length).trim();
+      break;
+    }
+  }
+  return cleaned;
 }
 
-// Apply the alias map to collapse EN/DE variants and paren-decorated forms
-// into one canonical (German) display name. Unmatched items fall through
-// unchanged, just paren-stripped.
+// Apply the strip pipeline + alias map to collapse EN/DE variants,
+// paren-decorated forms, and prep-state-modified names into one canonical
+// (German) display name. Unmatched items fall through unchanged after
+// stripping.
 function canonicalName(item) {
-  const cleaned = stripParens(item);
+  const cleaned = stripModifiers(item);
   const key = cleaned.toLowerCase();
   return INGREDIENT_ALIAS[key] || cleaned;
 }
@@ -778,15 +886,26 @@ export default function App() {
       let longCookRemaining = settings.maxLongCookPerWeek;
       const newMeals = {};
       const usedNames = [];
+      // Track every ingredient name + the unit it was used with so the LLM
+      // stays consistent across the week (avoids "Honig" tbsp on Mon, tsp on
+      // Tue, or "Banana" Mon vs "Banane" Tue).
+      const usedIngredients = new Map(); // canonical lowercase → "{Item} ({unit})"
       for (const day of DAYS) {
         const isWeekend = day === "Sat" || day === "Sun";
         const allowLongCook = isWeekend && longCookRemaining > 0;
-        const dayMeals = await generateDay(day, settings, allowLongCook, usedNames);
+        const ingredientList = [...usedIngredients.values()];
+        const dayMeals = await generateDay(day, settings, allowLongCook, usedNames, ingredientList);
         SLOTS.forEach((slot, i) => {
           const meal = dayMeals[i];
           newMeals[`${day}-${slot}`] = meal;
           if (meal?.name) usedNames.push(meal.name);
           if (meal?.prep_time === "60") longCookRemaining--;
+          for (const ing of meal?.ingredients || []) {
+            const k = `${canonicalName(ing.item).toLowerCase()}|${ing.unit || ""}`;
+            if (!usedIngredients.has(k)) {
+              usedIngredients.set(k, `${ing.item} (${ing.unit})`);
+            }
+          }
         });
         setMeals({ ...newMeals });
       }
