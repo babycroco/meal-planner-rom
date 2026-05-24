@@ -1,4 +1,4 @@
-# The Menu — Meal Planner
+# Meals — Weekly Meal Planner
 
 A personal weekly meal planner. Generates a 7-day × 4-slot (breakfast / lunch /
 dinner / snack) plan tuned for weight loss, high protein, and fast weekday cooking.

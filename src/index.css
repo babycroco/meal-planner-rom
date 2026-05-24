@@ -2,21 +2,81 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── Light "printed menu" design tokens ───────────────────────────── */
+/* ── Meals — Notion-derived design tokens ────────────────────────── */
 :root {
-  --paper: #f1ebdd;      /* page background — warm paper */
-  --card: #faf6ec;       /* cards, tiles, modals — lighter paper */
-  --field: #fffdf6;      /* input fields — near-white */
-  --ink: #221f1a;        /* primary text — warm near-black */
-  --ink-soft: #6b6457;   /* secondary text */
-  --ink-faint: #968b73;  /* micro-labels (still legible on light) */
-  --line: #ddd3bd;       /* hairline separators */
-  --gold: #c4a052;       /* signature gold — for solid fills */
-  --gold-ink: #8a6a20;   /* gold as readable text / the protein accent */
-  --hover: #ebe3d0;      /* hover tint */
-  --scrim: rgba(30, 26, 19, 0.55);
-  --serif: "Newsreader", Georgia, "Times New Roman", serif;
-  --sans: "Hanken Grotesk", system-ui, -apple-system, sans-serif;
+  /* Brand & primary */
+  --primary: #5046E5;          /* Notion purple — the signature CTA */
+  --primary-pressed: #3B33C2;
+  --primary-deep: #2A23A0;
+  --on-primary: #FFFFFF;
+
+  --brand-navy: #1A1B3A;       /* hero band tone */
+  --brand-navy-deep: #0F1029;
+  --brand-navy-mid: #2A2C55;
+
+  --link-blue: #2383E2;
+  --link-blue-pressed: #1A6FC4;
+
+  /* Brand spectrum (echoes Notion's database property colors) */
+  --brand-pink: #F45D9C;
+  --brand-pink-deep: #C73C7A;
+  --brand-orange: #F58536;
+  --brand-orange-deep: #C8531A;
+  --brand-purple: #6A4FB6;
+  --brand-purple-300: #B8A8E8;
+  --brand-purple-800: #3B2A75;
+  --brand-teal: #2F9E92;
+  --brand-green: #3D8C40;
+  --brand-yellow: #E8B739;
+  --brand-brown: #8C6A4F;
+
+  /* Card tints — pastel feature backgrounds */
+  --tint-peach: #FBE6D5;
+  --tint-rose: #FBD4D4;
+  --tint-mint: #D7F0D4;
+  --tint-lavender: #E6E0F5;
+  --tint-sky: #D8E8F5;
+  --tint-yellow: #FBEFC8;
+  --tint-yellow-bold: #FCD34D;
+  --tint-cream: #F8F1E1;
+  --tint-gray: #EFEEEB;
+
+  /* Surface */
+  --canvas: #FFFFFF;
+  --surface: #FBFAF8;
+  --surface-soft: #F4F2EE;
+  --hairline: #EFEEEB;
+  --hairline-soft: #F4F2EE;
+  --hairline-strong: #E0DDD6;
+
+  /* Text */
+  --ink-deep: #000000;
+  --ink: #191919;
+  --charcoal: #37352F;         /* signature warm-charcoal */
+  --slate: #5C5A54;
+  --steel: #87867F;
+  --stone: #9B9A93;
+  --muted: #C4C3BD;
+  --on-dark: #FFFFFF;
+  --on-dark-muted: rgba(255, 255, 255, 0.62);
+
+  /* Semantic */
+  --success: #3D8C40;
+  --warning: #E89C2A;
+  --error: #D7373F;
+  --error-tint: #FBE7E5;
+
+  /* Elevation */
+  --shadow-1: rgba(15, 15, 15, 0.04) 0 1px 2px 0;
+  --shadow-2: rgba(15, 15, 15, 0.08) 0 4px 12px 0;
+  --shadow-3: rgba(15, 15, 15, 0.20) 0 24px 48px -8px;
+  --shadow-4: rgba(15, 15, 15, 0.16) 0 16px 48px -8px;
+
+  /* Scrim */
+  --scrim: rgba(15, 15, 15, 0.45);
+
+  /* Type */
+  --font-sans: "Inter", "Notion Sans", -apple-system, system-ui, "Segoe UI", Helvetica, sans-serif;
 }
 
 html,
@@ -24,40 +84,36 @@ body,
 #root {
   margin: 0;
   min-height: 100%;
-  background: var(--paper);
+  background: var(--canvas);
 }
 
 body {
-  font-family: var(--sans);
+  font-family: var(--font-sans);
   color: var(--ink);
+  font-size: 16px;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Serif is opt-in — used for the menu's "voice" (titles, dish names, prose). */
-.serif {
-  font-family: var(--serif);
+/* Tighter display tracking — Notion's signature negative letter-spacing on
+   large headlines. Applied via .t-display utility on h1/h2 elements. */
+.t-display {
+  letter-spacing: -0.5px;
+}
+.t-display-tight {
+  letter-spacing: -1px;
 }
 
-/* Chamfered (45° clipped) corners. Apply to any rectangle that should read as
-   a discrete, art-deco-menu plaque. Cutouts show the parent's background. */
-.bevel {
-  clip-path: polygon(
-    10px 0,
-    calc(100% - 10px) 0,
-    100% 10px,
-    100% calc(100% - 10px),
-    calc(100% - 10px) 100%,
-    10px 100%,
-    0 calc(100% - 10px),
-    0 10px
-  );
+/* Tabular numerals for macro stats — keeps numbers aligned across the grid. */
+.tnum {
+  font-variant-numeric: tabular-nums;
 }
 
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
@@ -66,15 +122,5 @@ body {
 }
 
 .fade-in {
-  animation: fadeIn 0.5s ease-out both;
-}
-
-/* Faint paper grain for warmth — subtle enough not to touch readability. */
-.grain::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0.035;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='0.9' /%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' /%3E%3C/svg%3E");
+  animation: fadeIn 0.4s ease-out both;
 }
