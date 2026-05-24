@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Settings as SettingsIcon,
   Sparkles,
@@ -56,6 +56,41 @@ const TIME_COLORS = {
   "30": "#A85C1C",  // orange — slow
   "60": "#A8442F",  // red-brown — long-cook
 };
+
+// Ingredient section order on the consolidated grocery list. Matches the
+// enum in api/generate-meals.js MEAL_SCHEMA — the API tags every ingredient
+// with one of these, so the data is already aisle-sorted at the source.
+const SECTION_ORDER = ["Produce", "Meat & Fish", "Dairy & Eggs", "Pantry", "Frozen", "Bakery", "Other"];
+
+// Aggregate all 28 meals' ingredients into one list per section, summing
+// quantities when the same (item, unit) pair appears across multiple meals.
+// Item names are matched case-insensitively. Different units stay separate
+// (no conversions — "2 piece" + "300g" remain distinct rows).
+function consolidateGrocery(meals) {
+  const buckets = {};
+  for (const day of DAYS) {
+    for (const slot of SLOTS) {
+      const m = meals[`${day}-${slot}`];
+      if (!m?.ingredients?.length) continue;
+      for (const ing of m.ingredients) {
+        const section = ing.section || "Other";
+        const key = `${(ing.item || "").trim().toLowerCase()}|${ing.unit || ""}`;
+        if (!buckets[section]) buckets[section] = {};
+        if (buckets[section][key]) {
+          buckets[section][key].qty += ing.qty || 0;
+        } else {
+          buckets[section][key] = { ...ing, key };
+        }
+      }
+    }
+  }
+  return SECTION_ORDER
+    .filter((s) => buckets[s])
+    .map((section) => ({
+      section,
+      items: Object.values(buckets[section]).sort((a, b) => a.item.localeCompare(b.item)),
+    }));
+}
 
 // ── Tiny presentational helpers ───────────────────────────────────────
 
@@ -191,16 +226,20 @@ function MealTile({ slot, meal, isRegen, onClick, onRegen }) {
   );
 }
 
-function DayCard({ dayIndex, day, kcal, protein, carbs, fat, meals, regenKey, onOpenMeal, onRegen }) {
+function DayCard({ dayIndex, day, isToday, kcal, protein, carbs, fat, meals, regenKey, onOpenMeal, onRegen }) {
   return (
     <article
       className="bg-canvas rounded-lg border border-hairline p-4 flex flex-col gap-3 hover:shadow-s2 transition-shadow fade-in"
       style={{ animationDelay: `${dayIndex * 45}ms` }}
     >
       <header className="flex items-baseline justify-between gap-2 pb-2.5 border-b border-hairline-soft">
-        <div>
-          <Eyebrow>Day 0{dayIndex + 1}</Eyebrow>
-          <div className="mt-0.5 text-lg font-semibold text-ink tracking-[-0.2px]">{day}</div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-lg font-semibold text-ink tracking-[-0.2px]">{day}</span>
+          {isToday && (
+            <span className="px-2 py-0.5 rounded-full bg-primary text-white text-[10px] font-semibold uppercase tracking-[0.08em] leading-none">
+              Today
+            </span>
+          )}
         </div>
         <div className="text-right text-[11px] text-steel font-medium leading-tight tnum">
           <div className="text-ink font-semibold">{kcal.toLocaleString()} kcal</div>
@@ -260,7 +299,6 @@ function ModalHeader({ title, onClose }) {
 export default function App() {
   const [settings, setSettings] = useState(() => ({ ...DEFAULT_SETTINGS, ...load("settings_v2", {}) }));
   const [meals, setMeals] = useState(() => load("meals_v2", {}));
-  const [grocery, setGrocery] = useState(() => load("grocery_v2", null));
   const [checked, setChecked] = useState(() => load("checked_v2", {}));
   const [view, setView] = useState("plan");
   const [showSettings, setShowSettings] = useState(false);
@@ -275,8 +313,17 @@ export default function App() {
 
   useEffect(() => { save("settings_v2", settings); }, [settings]);
   useEffect(() => { save("meals_v2", meals); }, [meals]);
-  useEffect(() => { save("grocery_v2", grocery); }, [grocery]);
   useEffect(() => { save("checked_v2", checked); }, [checked]);
+
+  // Grocery list is derived from meals — no separate state needed.
+  const groceryCategories = useMemo(() => consolidateGrocery(meals), [meals]);
+  const groceryItemCount = groceryCategories.reduce((n, c) => n + c.items.length, 0);
+
+  // Display order: today first, then today+1, today+2, ..., wrapping around.
+  // new Date().getDay() returns 0 for Sun..6 for Sat; DAYS is Mon..Sun (Mon=0).
+  const todayIdx = (new Date().getDay() + 6) % 7;
+  const todayName = DAYS[todayIdx];
+  const orderedDays = [...DAYS.slice(todayIdx), ...DAYS.slice(0, todayIdx)];
 
   const generateWeek = async () => {
     setLoading(true);
@@ -297,7 +344,6 @@ export default function App() {
         });
         setMeals({ ...newMeals });
       }
-      setGrocery(null);
       setChecked({});
     } catch (e) {
       console.error(e);
@@ -317,7 +363,6 @@ export default function App() {
         .filter(Boolean);
       const meal = await apiRegenerateMeal(day, slot, settings, others);
       setMeals((prev) => ({ ...prev, [key]: meal }));
-      setGrocery(null);
     } catch (e) {
       console.error(e);
       setError(`Regeneration failed: ${e.message}`);
@@ -325,26 +370,8 @@ export default function App() {
     setRegenKey(null);
   };
 
-  const buildGroceryList = () => {
-    const byRecipe = [];
-    for (const day of DAYS) {
-      for (const slot of SLOTS) {
-        const k = `${day}-${slot}`;
-        const m = meals[k];
-        if (!m?.ingredients?.length) continue;
-        byRecipe.push({
-          key: k, day, slot, name: m.name, prep_time: m.prep_time,
-          ingredients: m.ingredients,
-        });
-      }
-    }
-    setGrocery({ mode: "byRecipe", recipes: byRecipe });
-    setChecked({});
-    setView("grocery");
-  };
-
   const exportPayload = () => {
-    const payload = { v: 2, settings, meals, grocery, checked };
+    const payload = { v: 3, settings, meals, checked };
     return btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
   };
 
@@ -372,7 +399,8 @@ export default function App() {
       if (!payload.meals) throw new Error("Invalid plan code");
       if (payload.settings) setSettings({ ...DEFAULT_SETTINGS, ...payload.settings });
       setMeals(payload.meals || {});
-      setGrocery(payload.grocery || null);
+      // v2 payloads keyed checked by `${recipeKey}-${index}`; v3 keys by `${item}|${unit}`.
+      // Either form coexists harmlessly — stale keys just don't match new rows.
       setChecked(payload.checked || {});
       setImportText("");
       setTransferOpen(false);
@@ -391,7 +419,6 @@ export default function App() {
   const totalCarbs = DAYS.reduce((s, d) => s + dayCarbs(d), 0);
   const totalFat = DAYS.reduce((s, d) => s + dayFat(d), 0);
   const hasMeals = Object.keys(meals).length > 0;
-  const hasGrocery = !!grocery?.recipes?.length;
 
   const pctSum = settings.breakfastPct + settings.lunchPct + settings.dinnerPct + settings.snackPct;
 
@@ -445,15 +472,11 @@ export default function App() {
                 </button>
                 <button
                   onClick={() => setView("grocery")}
-                  disabled={!hasGrocery}
-                  className={`px-4 py-1.5 text-sm font-medium rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${view === "grocery" ? "bg-ink-deep text-white" : "text-steel hover:text-ink"}`}
+                  className={`px-4 py-1.5 text-sm font-medium rounded-full transition-colors inline-flex items-center gap-1.5 ${view === "grocery" ? "bg-ink-deep text-white" : "text-steel hover:text-ink"}`}
                 >
-                  Cart
+                  <ShoppingCart size={13} /> Cart
                 </button>
               </div>
-              <Button variant="secondary" onClick={buildGroceryList}>
-                <ShoppingCart size={14} /> Grocery list
-              </Button>
             </div>
           )}
         </header>
@@ -519,14 +542,15 @@ export default function App() {
           </div>
         )}
 
-        {/* ── Plan view: 7 day cards ───────────────────────────── */}
+        {/* ── Plan view: 7 day cards, today first ──────────────── */}
         {view === "plan" && hasMeals && (
           <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
-            {DAYS.map((day, di) => (
+            {orderedDays.map((day, di) => (
               <DayCard
                 key={day}
                 dayIndex={di}
                 day={day}
+                isToday={day === todayName}
                 kcal={dayKcal(day)}
                 protein={dayProtein(day)}
                 carbs={dayCarbs(day)}
@@ -540,67 +564,74 @@ export default function App() {
           </div>
         )}
 
-        {/* ── Grocery view ─────────────────────────────────────── */}
-        {view === "grocery" && grocery?.recipes && (
-          <div className="space-y-4 fade-in">
-            {grocery.recipes.map((recipe) => {
-              const total = recipe.ingredients.length;
-              const done = recipe.ingredients.filter((_, i) => checked[`${recipe.key}-${i}`]).length;
-              const allDone = done === total && total > 0;
-              return (
-                <div
-                  key={recipe.key}
-                  className="bg-canvas rounded-lg border border-hairline p-5 transition-opacity"
-                  style={{ opacity: allDone ? 0.55 : 1 }}
-                >
-                  <div className="flex items-center justify-between gap-4 mb-3 pb-3 border-b border-hairline-soft">
-                    <div className="min-w-0 flex-1">
-                      <Eyebrow>{recipe.day} · {SLOT_LABELS[recipe.slot]}</Eyebrow>
-                      <h3 className="mt-1 text-base font-semibold text-ink truncate">{recipe.name}</h3>
+        {/* ── Grocery view: consolidated by section ────────────── */}
+        {view === "grocery" && hasMeals && (
+          <div className="fade-in">
+            <div className="flex items-end justify-between gap-4 mb-5">
+              <div>
+                <Eyebrow>Cart · Week 01</Eyebrow>
+                <h2 className="mt-1 text-2xl sm:text-3xl font-semibold text-ink tracking-[-0.3px]">Grocery list</h2>
+                <p className="mt-1 text-sm text-steel">
+                  {groceryItemCount} {groceryItemCount === 1 ? "item" : "items"} · sorted by aisle
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+              {groceryCategories.map(({ section, items }) => {
+                const done = items.filter((it) => checked[it.key]).length;
+                const allDone = done === items.length && items.length > 0;
+                return (
+                  <div
+                    key={section}
+                    className="bg-canvas rounded-lg border border-hairline p-5 transition-opacity"
+                    style={{ opacity: allDone ? 0.55 : 1 }}
+                  >
+                    <div className="flex items-center justify-between gap-3 mb-3 pb-3 border-b border-hairline-soft">
+                      <Eyebrow>{section}</Eyebrow>
+                      <span className="shrink-0 text-xs text-stone font-medium tnum">
+                        {done}/{items.length}
+                      </span>
                     </div>
-                    <div className="shrink-0 text-xs text-stone font-medium tnum">
-                      {done}/{total}
-                    </div>
+                    <ul className="space-y-1">
+                      {items.map((ing) => {
+                        const isChecked = !!checked[ing.key];
+                        return (
+                          <li key={ing.key}>
+                            <button
+                              onClick={() => setChecked((p) => ({ ...p, [ing.key]: !p[ing.key] }))}
+                              className="w-full flex items-center gap-3 py-1.5 px-1 text-left rounded-sm hover:bg-surface-soft transition-colors"
+                            >
+                              <span
+                                className="w-4 h-4 rounded-xs grid place-items-center shrink-0 border transition-colors"
+                                style={{
+                                  background: isChecked ? "var(--primary)" : "transparent",
+                                  borderColor: isChecked ? "var(--primary)" : "var(--hairline-strong)",
+                                }}
+                              >
+                                {isChecked && <Check size={11} strokeWidth={3} className="text-white" />}
+                              </span>
+                              <span
+                                className="flex-1 text-sm capitalize"
+                                style={{
+                                  color: isChecked ? "var(--stone)" : "var(--ink)",
+                                  textDecoration: isChecked ? "line-through" : "none",
+                                }}
+                              >
+                                {ing.item}
+                              </span>
+                              <span className="text-xs tnum text-steel font-medium shrink-0">
+                                {ing.qty} {ing.unit}
+                              </span>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
                   </div>
-                  <ul className="space-y-1">
-                    {recipe.ingredients.map((ing, i) => {
-                      const id = `${recipe.key}-${i}`;
-                      const isChecked = !!checked[id];
-                      return (
-                        <li key={id}>
-                          <button
-                            onClick={() => setChecked((p) => ({ ...p, [id]: !p[id] }))}
-                            className="w-full flex items-center gap-3 py-2 px-1 text-left rounded-sm hover:bg-surface-soft transition-colors"
-                          >
-                            <span
-                              className="w-4 h-4 rounded-xs grid place-items-center shrink-0 border transition-colors"
-                              style={{
-                                background: isChecked ? "var(--primary)" : "transparent",
-                                borderColor: isChecked ? "var(--primary)" : "var(--hairline-strong)",
-                              }}
-                            >
-                              {isChecked && <Check size={11} strokeWidth={3} className="text-white" />}
-                            </span>
-                            <span
-                              className="flex-1 text-sm"
-                              style={{
-                                color: isChecked ? "var(--stone)" : "var(--ink)",
-                                textDecoration: isChecked ? "line-through" : "none",
-                              }}
-                            >
-                              {ing.item}
-                            </span>
-                            <span className="text-xs tnum text-steel font-medium">
-                              {ing.qty} {ing.unit}
-                            </span>
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         )}
       </main>
