@@ -258,7 +258,9 @@ function canonicalName(item) {
 // Aggregate all 28 meals' ingredients into one list per section, summing
 // quantities when (canonical-name, unit) match across meals. Different units
 // stay separate (no conversions — "2 piece" + "300g" remain distinct rows).
-function consolidateGrocery(meals) {
+// Pantry items are subtracted by canonical-name + unit; rows that go to zero
+// or below are dropped entirely (already covered by the pantry).
+function consolidateGrocery(meals, pantry = []) {
   const buckets = {};
   for (const day of DAYS) {
     for (const slot of SLOTS) {
@@ -277,13 +279,29 @@ function consolidateGrocery(meals) {
       }
     }
   }
+
+  for (const p of pantry) {
+    const display = canonicalName(p.item);
+    const key = `${display.toLowerCase()}|${p.unit || ""}`;
+    for (const section of Object.keys(buckets)) {
+      if (buckets[section][key]) {
+        buckets[section][key].qty -= p.qty || 0;
+        if (buckets[section][key].qty <= 0) delete buckets[section][key];
+        break;
+      }
+    }
+  }
+
   return SECTION_ORDER
-    .filter((s) => buckets[s])
+    .filter((s) => buckets[s] && Object.keys(buckets[s]).length > 0)
     .map((section) => ({
       section,
       items: Object.values(buckets[section]).sort((a, b) => a.item.localeCompare(b.item)),
     }));
 }
+
+const UNITS = ["g", "ml", "piece", "tbsp", "tsp"];
+const EMPTY_PANTRY_DRAFT = { item: "", qty: "", unit: "g", section: "Produce" };
 
 // ── Tiny presentational helpers ───────────────────────────────────────
 
@@ -599,6 +617,8 @@ export default function App() {
   const [meals, setMeals] = useState(() => load("meals_v2", {}));
   const [checked, setChecked] = useState(() => load("checked_v2", {}));
   const [activeProgramId, setActiveProgramId] = useState(() => load("activeProgram", "cut"));
+  const [pantry, setPantry] = useState(() => load("pantry_v1", []));
+  const [pantryDraft, setPantryDraft] = useState(EMPTY_PANTRY_DRAFT);
   const [view, setView] = useState("plan");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -615,6 +635,40 @@ export default function App() {
   useEffect(() => { save("meals_v2", meals); }, [meals]);
   useEffect(() => { save("checked_v2", checked); }, [checked]);
   useEffect(() => { save("activeProgram", activeProgramId); }, [activeProgramId]);
+  useEffect(() => { save("pantry_v1", pantry); }, [pantry]);
+
+  const addPantryItem = () => {
+    const trimmed = pantryDraft.item.trim();
+    const qty = Number(pantryDraft.qty);
+    if (!trimmed || !qty || qty <= 0) return;
+    const display = canonicalName(trimmed);
+    const norm = display.toLowerCase();
+    setPantry((prev) => {
+      const matchIdx = prev.findIndex(
+        (p) => canonicalName(p.item).toLowerCase() === norm && p.unit === pantryDraft.unit,
+      );
+      if (matchIdx >= 0) {
+        const next = [...prev];
+        next[matchIdx] = { ...next[matchIdx], qty: next[matchIdx].qty + qty };
+        return next;
+      }
+      return [
+        ...prev,
+        {
+          id: `p${Date.now()}${Math.floor(Math.random() * 1000)}`,
+          item: display,
+          qty,
+          unit: pantryDraft.unit,
+          section: pantryDraft.section,
+        },
+      ];
+    });
+    setPantryDraft({ ...EMPTY_PANTRY_DRAFT, unit: pantryDraft.unit, section: pantryDraft.section });
+  };
+
+  const deletePantryItem = (id) => {
+    setPantry((prev) => prev.filter((p) => p.id !== id));
+  };
 
   const switchProgram = (id) => {
     const p = PROGRAM_BY_ID[id];
@@ -631,9 +685,25 @@ export default function App() {
 
   const activeProgram = PROGRAM_BY_ID[activeProgramId] || PROGRAMS[0];
 
-  // Grocery list is derived from meals — no separate state needed.
-  const groceryCategories = useMemo(() => consolidateGrocery(meals), [meals]);
+  // Grocery list is derived from meals minus pantry — no separate state.
+  const groceryCategories = useMemo(() => consolidateGrocery(meals, pantry), [meals, pantry]);
   const groceryItemCount = groceryCategories.reduce((n, c) => n + c.items.length, 0);
+
+  // Pantry items grouped by section for display, sorted alphabetically.
+  const pantryBySection = useMemo(() => {
+    const buckets = {};
+    for (const p of pantry) {
+      const section = p.section || "Other";
+      if (!buckets[section]) buckets[section] = [];
+      buckets[section].push(p);
+    }
+    return SECTION_ORDER
+      .filter((s) => buckets[s]?.length)
+      .map((section) => ({
+        section,
+        items: [...buckets[section]].sort((a, b) => a.item.localeCompare(b.item)),
+      }));
+  }, [pantry]);
 
   // Display order: today first, then today+1, today+2, ..., wrapping around.
   // new Date().getDay() returns 0 for Sun..6 for Sat; DAYS is Mon..Sun (Mon=0).
@@ -961,11 +1031,103 @@ export default function App() {
 
         {/* ── Pantry view ──────────────────────────────────────── */}
         {view === "pantry" && (
-          <ComingSoon
-            icon={Package}
-            title="Pantry"
-            description="Track what's already in your fridge and pantry. Items you mark as in stock get subtracted from the consolidated grocery list automatically."
-          />
+          <div className="fade-in">
+            <p className="text-sm text-steel mb-5">
+              {pantry.length === 0
+                ? "Add what's already in your fridge. Pantry items subtract from the grocery list automatically."
+                : `${pantry.length} ${pantry.length === 1 ? "item" : "items"} in stock · subtracted from grocery list`}
+            </p>
+
+            {/* Add-item form */}
+            <div className="bg-canvas border border-hairline rounded-lg p-4 sm:p-5 mb-6">
+              <div className="grid grid-cols-1 sm:grid-cols-[1fr_100px_100px_140px_auto] gap-2 items-end">
+                <label className="block">
+                  <Eyebrow className="mb-1.5">Item</Eyebrow>
+                  <Input
+                    type="text"
+                    value={pantryDraft.item}
+                    onChange={(e) => setPantryDraft((p) => ({ ...p, item: e.target.value }))}
+                    onKeyDown={(e) => { if (e.key === "Enter") addPantryItem(); }}
+                    placeholder="e.g. Skyr"
+                  />
+                </label>
+                <label className="block">
+                  <Eyebrow className="mb-1.5">Qty</Eyebrow>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={pantryDraft.qty}
+                    onChange={(e) => setPantryDraft((p) => ({ ...p, qty: e.target.value }))}
+                    onKeyDown={(e) => { if (e.key === "Enter") addPantryItem(); }}
+                    placeholder="0"
+                  />
+                </label>
+                <label className="block">
+                  <Eyebrow className="mb-1.5">Unit</Eyebrow>
+                  <select
+                    value={pantryDraft.unit}
+                    onChange={(e) => setPantryDraft((p) => ({ ...p, unit: e.target.value }))}
+                    className="w-full h-11 px-4 rounded-md bg-canvas text-ink border border-hairline-strong text-sm focus:outline-none focus:border-primary focus:border-2"
+                  >
+                    {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+                  </select>
+                </label>
+                <label className="block">
+                  <Eyebrow className="mb-1.5">Section</Eyebrow>
+                  <select
+                    value={pantryDraft.section}
+                    onChange={(e) => setPantryDraft((p) => ({ ...p, section: e.target.value }))}
+                    className="w-full h-11 px-4 rounded-md bg-canvas text-ink border border-hairline-strong text-sm focus:outline-none focus:border-primary focus:border-2"
+                  >
+                    {SECTION_ORDER.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </label>
+                <Button
+                  onClick={addPantryItem}
+                  disabled={!pantryDraft.item.trim() || !Number(pantryDraft.qty)}
+                  className="h-11"
+                >
+                  Add
+                </Button>
+              </div>
+            </div>
+
+            {/* Pantry list grouped by section */}
+            {pantry.length === 0 ? (
+              <div className="py-12 text-center fade-in">
+                <div className="w-12 h-12 mx-auto mb-4 rounded-lg bg-surface-soft grid place-items-center text-stone">
+                  <Package size={22} />
+                </div>
+                <p className="text-sm text-slate">No items yet — add one above.</p>
+              </div>
+            ) : (
+              <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+                {pantryBySection.map(({ section, items }) => (
+                  <div key={section} className="bg-canvas rounded-lg border border-hairline p-5">
+                    <div className="mb-3 pb-3 border-b border-hairline-soft flex items-center justify-between">
+                      <Eyebrow>{section}</Eyebrow>
+                      <span className="text-xs text-stone font-medium tnum">{items.length}</span>
+                    </div>
+                    <ul className="space-y-1.5">
+                      {items.map((item) => (
+                        <li key={item.id} className="group flex items-center gap-3 py-1.5 px-1 rounded-sm hover:bg-surface-soft">
+                          <span className="flex-1 text-sm text-ink capitalize">{item.item}</span>
+                          <span className="text-xs tnum text-steel font-medium">{item.qty} {item.unit}</span>
+                          <button
+                            onClick={() => deletePantryItem(item.id)}
+                            className="text-stone hover:text-error opacity-0 group-hover:opacity-100 transition-opacity"
+                            aria-label={`Remove ${item.item}`}
+                          >
+                            <X size={14} />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         )}
 
         {/* ── Coach view ───────────────────────────────────────── */}
