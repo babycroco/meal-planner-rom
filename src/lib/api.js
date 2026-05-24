@@ -4,10 +4,10 @@
 
 const APP_SECRET = import.meta.env.VITE_APP_SECRET || "";
 
-async function callApi(payload) {
+async function callApi(endpoint, payload) {
   let res;
   try {
-    res = await fetch("/api/generate-meals", {
+    res = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -34,7 +34,7 @@ async function callApi(payload) {
 
 // Generate one day's 4 meals (breakfast, lunch, dinner, snack).
 export async function generateDay(day, settings, allowLongCook, existingNames) {
-  const { meals } = await callApi({
+  const { meals } = await callApi("/api/generate-meals", {
     mode: "day",
     day,
     settings,
@@ -46,7 +46,7 @@ export async function generateDay(day, settings, allowLongCook, existingNames) {
 
 // Regenerate a single meal for one slot.
 export async function regenerateMeal(day, slot, settings, existingNames) {
-  const { meal } = await callApi({
+  const { meal } = await callApi("/api/generate-meals", {
     mode: "meal",
     day,
     slot,
@@ -54,4 +54,9 @@ export async function regenerateMeal(day, slot, settings, existingNames) {
     existingNames,
   });
   return meal;
+}
+
+// Send a Coach chat message — returns { reply, proposedChanges }.
+export async function coachMessage(messages, settings, meals) {
+  return await callApi("/api/coach", { messages, settings, meals });
 }

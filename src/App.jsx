@@ -20,9 +20,10 @@ import {
   TrendingUp,
   MessageCircle,
   Menu as MenuIcon,
+  Send,
 } from "lucide-react";
 import { load, save } from "./lib/storage";
-import { generateDay, regenerateMeal as apiRegenerateMeal } from "./lib/api";
+import { generateDay, regenerateMeal as apiRegenerateMeal, coachMessage as apiCoachMessage } from "./lib/api";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const SLOTS = ["breakfast", "lunch", "dinner", "snack"];
@@ -619,6 +620,9 @@ export default function App() {
   const [activeProgramId, setActiveProgramId] = useState(() => load("activeProgram", "cut"));
   const [pantry, setPantry] = useState(() => load("pantry_v1", []));
   const [pantryDraft, setPantryDraft] = useState(EMPTY_PANTRY_DRAFT);
+  const [coachMessages, setCoachMessages] = useState(() => load("coachMessages_v1", []));
+  const [coachInput, setCoachInput] = useState("");
+  const [coachLoading, setCoachLoading] = useState(false);
   const [view, setView] = useState("plan");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -636,6 +640,56 @@ export default function App() {
   useEffect(() => { save("checked_v2", checked); }, [checked]);
   useEffect(() => { save("activeProgram", activeProgramId); }, [activeProgramId]);
   useEffect(() => { save("pantry_v1", pantry); }, [pantry]);
+  useEffect(() => { save("coachMessages_v1", coachMessages); }, [coachMessages]);
+
+  const sendCoachMessage = async (text) => {
+    const trimmed = (text || "").trim();
+    if (!trimmed || coachLoading) return;
+    const userMsg = { id: `u${Date.now()}`, role: "user", content: trimmed };
+    const nextHistory = [...coachMessages, userMsg];
+    setCoachMessages(nextHistory);
+    setCoachInput("");
+    setCoachLoading(true);
+    setError(null);
+    try {
+      const { reply, proposedChanges } = await apiCoachMessage(
+        nextHistory.map((m) => ({ role: m.role, content: m.content })),
+        settings,
+        meals,
+      );
+      setCoachMessages((prev) => [
+        ...prev,
+        {
+          id: `a${Date.now()}`,
+          role: "assistant",
+          content: reply || "",
+          proposedChanges: proposedChanges || [],
+          applied: false,
+        },
+      ]);
+    } catch (e) {
+      console.error(e);
+      setError(`Coach: ${e.message}`);
+    }
+    setCoachLoading(false);
+  };
+
+  const applyCoachChanges = (msgId, changes) => {
+    if (!Array.isArray(changes) || changes.length === 0) return;
+    setMeals((prev) => {
+      const next = { ...prev };
+      for (const c of changes) {
+        if (c.day && c.slot && c.meal) next[`${c.day}-${c.slot}`] = c.meal;
+      }
+      return next;
+    });
+    setCoachMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, applied: true } : m)));
+  };
+
+  const clearCoachHistory = () => {
+    if (coachMessages.length === 0) return;
+    setCoachMessages([]);
+  };
 
   const addPantryItem = () => {
     const trimmed = pantryDraft.item.trim();
@@ -1132,11 +1186,130 @@ export default function App() {
 
         {/* ── Coach view ───────────────────────────────────────── */}
         {view === "coach" && (
-          <ComingSoon
-            icon={MessageCircle}
-            title="Coach"
-            description="Ask your on-demand nutrition coach to swap a meal, cut a day's carbs without dropping protein, or rebuild the week around a different cuisine. Powered by Claude."
-          />
+          <div className="fade-in">
+            <div className="flex items-start justify-between gap-4 mb-5">
+              <p className="text-sm text-steel max-w-[560px]">
+                Ask the coach to swap a meal, rebalance macros, or work around a constraint. Proposed changes show an Apply button so you stay in control.
+              </p>
+              {coachMessages.length > 0 && (
+                <button
+                  onClick={clearCoachHistory}
+                  className="text-xs text-steel hover:text-error font-medium"
+                >
+                  Clear history
+                </button>
+              )}
+            </div>
+
+            {coachMessages.length === 0 ? (
+              <div className="bg-canvas border border-hairline rounded-lg p-6 sm:p-8">
+                <Eyebrow className="!text-charcoal mb-3">Try asking</Eyebrow>
+                <div className="space-y-2">
+                  {[
+                    "Swap Wednesday's dinner — I'm short on time, under 20 min.",
+                    "Cut Friday's carbs by 30g without dropping protein.",
+                    "Replace all the salmon this week with chicken.",
+                    "I've got leftover lentils — work them into tomorrow.",
+                  ].map((prompt) => (
+                    <button
+                      key={prompt}
+                      onClick={() => sendCoachMessage(prompt)}
+                      disabled={!hasMeals || coachLoading}
+                      className="w-full text-left px-4 py-2.5 rounded-md bg-surface hover:bg-surface-soft text-sm text-ink border border-hairline-soft transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      "{prompt}"
+                    </button>
+                  ))}
+                </div>
+                {!hasMeals && (
+                  <p className="mt-4 text-xs text-stone">
+                    Generate a week first — the coach reads your current plan to suggest changes.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-4 mb-6">
+                {coachMessages.map((msg) => (
+                  <div key={msg.id}>
+                    {msg.role === "user" ? (
+                      <div className="flex justify-end">
+                        <div className="max-w-[80%] px-4 py-2.5 rounded-lg bg-primary text-white text-sm">
+                          {msg.content}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="max-w-[85%]">
+                        <div className="bg-canvas border border-hairline rounded-lg p-4">
+                          <Eyebrow className="!text-charcoal mb-2">Coach</Eyebrow>
+                          <div className="text-sm text-ink leading-relaxed whitespace-pre-wrap">{msg.content}</div>
+                          {msg.proposedChanges?.length > 0 && (
+                            <div className="mt-3 pt-3 border-t border-hairline-soft">
+                              <Eyebrow className="!text-stone mb-2">
+                                {msg.proposedChanges.length === 1 ? "1 change" : `${msg.proposedChanges.length} changes`}
+                              </Eyebrow>
+                              <ul className="space-y-1.5 mb-3">
+                                {msg.proposedChanges.map((c, i) => (
+                                  <li key={i} className="text-xs text-charcoal">
+                                    <span className="font-semibold">{c.day} {SLOT_LABELS[c.slot] || c.slot}</span>
+                                    {" · "}
+                                    <span>{c.meal?.name}</span>
+                                    {c.meal?.kcal && (
+                                      <span className="text-stone"> ({c.meal.kcal} kcal · {c.meal.protein_g}g P · prep {c.meal.prep_time})</span>
+                                    )}
+                                  </li>
+                                ))}
+                              </ul>
+                              {msg.applied ? (
+                                <span className="inline-flex items-center gap-1.5 text-xs text-success font-semibold">
+                                  <Check size={12} strokeWidth={3} /> Applied
+                                </span>
+                              ) : (
+                                <Button onClick={() => applyCoachChanges(msg.id, msg.proposedChanges)} className="!py-1.5 !px-3 !text-xs">
+                                  <Check size={12} /> Apply changes
+                                </Button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {coachLoading && (
+                  <div className="max-w-[85%]">
+                    <div className="bg-canvas border border-hairline rounded-lg p-4 flex items-center gap-2 text-sm text-steel">
+                      <Loader2 size={14} className="animate-spin" /> Coach is thinking…
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Input — always at the bottom, sticky-feel */}
+            <div className="bg-canvas border border-hairline rounded-lg p-3 sticky bottom-4 shadow-s1">
+              <form
+                onSubmit={(e) => { e.preventDefault(); sendCoachMessage(coachInput); }}
+                className="flex items-center gap-2"
+              >
+                <input
+                  type="text"
+                  value={coachInput}
+                  onChange={(e) => setCoachInput(e.target.value)}
+                  placeholder={hasMeals ? "Ask the coach…" : "Generate a week first to talk to the coach"}
+                  disabled={!hasMeals || coachLoading}
+                  className="flex-1 h-10 px-3 text-sm bg-transparent text-ink placeholder:text-stone focus:outline-none disabled:cursor-not-allowed"
+                />
+                <button
+                  type="submit"
+                  disabled={!coachInput.trim() || !hasMeals || coachLoading}
+                  aria-label="Send"
+                  className="inline-flex items-center justify-center w-10 h-10 rounded-md bg-primary text-white hover:bg-primary-pressed disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  {coachLoading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                </button>
+              </form>
+            </div>
+          </div>
         )}
         </main>
       </div>
