@@ -14,6 +14,12 @@ import {
   Share2,
   Download,
   Clock,
+  Calendar,
+  Package,
+  Dumbbell,
+  TrendingUp,
+  MessageCircle,
+  Menu as MenuIcon,
 } from "lucide-react";
 import { load, save } from "./lib/storage";
 import { generateDay, regenerateMeal as apiRegenerateMeal } from "./lib/api";
@@ -41,6 +47,17 @@ const DEFAULT_SETTINGS = {
   cuisines: "Mediterranean, Middle Eastern, Asian",
   avoid: "",
 };
+
+// Macro presets the user can switch between via the sidebar. Switching a
+// program overwrites the four macro targets on `settings` (everything else —
+// meal split, cuisines, etc. — stays untouched). Tuned for a 39yo male,
+// 180cm, 79kg, 4x/week training.
+const PROGRAMS = [
+  { id: "cut",      name: "Cut",      kcalTarget: 2000, proteinTarget: 160, carbsTarget: 200, fatTarget: 65 },
+  { id: "maintain", name: "Maintain", kcalTarget: 2400, proteinTarget: 170, carbsTarget: 270, fatTarget: 80 },
+  { id: "leanbulk", name: "Lean bulk", kcalTarget: 2700, proteinTarget: 180, carbsTarget: 320, fatTarget: 90 },
+];
+const PROGRAM_BY_ID = Object.fromEntries(PROGRAMS.map((p) => [p.id, p]));
 
 const TIME_LABELS = {
   "5": "≤5 min",
@@ -470,13 +487,120 @@ function ModalHeader({ title, onClose }) {
   );
 }
 
+function SidebarSection({ title, children }) {
+  return (
+    <div className="mb-4">
+      <div className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-stone">{title}</div>
+      <div className="space-y-0.5">{children}</div>
+    </div>
+  );
+}
+
+function SidebarItem({ icon: Icon, label, active, onClick, dotColor }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium text-left transition-colors ${active ? "bg-surface-soft text-ink" : "text-charcoal hover:bg-surface-soft"}`}
+    >
+      {Icon && <Icon size={16} strokeWidth={2} className={active ? "text-ink" : "text-steel"} />}
+      <span className="flex-1 truncate">{label}</span>
+      {dotColor && (
+        <span className="w-1.5 h-1.5 rounded-full" style={{ background: dotColor }} />
+      )}
+    </button>
+  );
+}
+
+function Sidebar({
+  view, setView, activeProgramId, switchProgram,
+  onSettings, onSync, onGenerate, hasMeals, loading,
+  sidebarOpen, onCloseSidebar,
+}) {
+  return (
+    <>
+      {/* Mobile scrim */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/30 lg:hidden"
+          onClick={onCloseSidebar}
+        />
+      )}
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 w-60 bg-surface border-r border-hairline flex flex-col transform transition-transform lg:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
+      >
+        <div className="h-16 px-5 flex items-center justify-between border-b border-hairline">
+          <a href="/" className="flex items-center gap-2.5 select-none">
+            <span className="w-7 h-7 rounded-sm bg-ink-deep text-white grid place-items-center text-base font-bold leading-none">M</span>
+            <span className="text-[18px] font-semibold tracking-[-0.4px] text-ink">Meals</span>
+          </a>
+          <button
+            className="lg:hidden text-charcoal p-1 hover:bg-surface-soft rounded-sm"
+            onClick={onCloseSidebar}
+            aria-label="Close menu"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-2.5 py-4">
+          <SidebarSection title="Workspace">
+            <SidebarItem icon={Calendar} label="This week" active={view === "plan"} onClick={() => { setView("plan"); onCloseSidebar(); }} />
+            <SidebarItem icon={ShoppingCart} label="Grocery list" active={view === "grocery"} onClick={() => { setView("grocery"); onCloseSidebar(); }} />
+            <SidebarItem icon={Package} label="Pantry" active={view === "pantry"} onClick={() => { setView("pantry"); onCloseSidebar(); }} />
+          </SidebarSection>
+
+          <SidebarSection title="Programs">
+            <SidebarItem icon={Flame} label="Cut" active={activeProgramId === "cut"} onClick={() => switchProgram("cut")} dotColor={activeProgramId === "cut" ? "var(--primary)" : null} />
+            <SidebarItem icon={Dumbbell} label="Maintain" active={activeProgramId === "maintain"} onClick={() => switchProgram("maintain")} dotColor={activeProgramId === "maintain" ? "var(--primary)" : null} />
+            <SidebarItem icon={TrendingUp} label="Lean bulk" active={activeProgramId === "leanbulk"} onClick={() => switchProgram("leanbulk")} dotColor={activeProgramId === "leanbulk" ? "var(--primary)" : null} />
+          </SidebarSection>
+
+          <SidebarSection title="Tools">
+            <SidebarItem icon={MessageCircle} label="Coach" active={view === "coach"} onClick={() => { setView("coach"); onCloseSidebar(); }} />
+          </SidebarSection>
+        </div>
+
+        <div className="border-t border-hairline p-3 flex items-center gap-1">
+          <IconButton label="Settings" onClick={onSettings}><SettingsIcon size={18} /></IconButton>
+          <IconButton label="Sync" onClick={onSync}><Share2 size={18} /></IconButton>
+          <button
+            onClick={onGenerate}
+            disabled={loading}
+            className="ml-auto inline-flex items-center justify-center gap-2 rounded-md font-medium text-sm leading-tight px-3 py-2 bg-primary text-white hover:bg-primary-pressed transition-colors disabled:opacity-50"
+          >
+            {loading ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+            {hasMeals ? "Regenerate" : "Generate"}
+          </button>
+        </div>
+      </aside>
+    </>
+  );
+}
+
+function ComingSoon({ icon: Icon, title, description }) {
+  return (
+    <div className="py-16 sm:py-24 text-center fade-in">
+      <div className="w-16 h-16 mx-auto mb-5 rounded-lg bg-surface-soft grid place-items-center text-stone">
+        {Icon && <Icon size={28} />}
+      </div>
+      <h2 className="text-2xl font-semibold text-ink tracking-[-0.3px]">{title}</h2>
+      <p className="mt-2 text-sm text-slate max-w-[420px] mx-auto leading-relaxed">{description}</p>
+      <div className="mt-5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-tint-lavender text-brand-purple-800 text-[11px] font-semibold uppercase tracking-[0.08em]">
+        Coming next
+      </div>
+    </div>
+  );
+}
+
 // ── Main app ──────────────────────────────────────────────────────────
 
 export default function App() {
   const [settings, setSettings] = useState(() => ({ ...DEFAULT_SETTINGS, ...load("settings_v2", {}) }));
   const [meals, setMeals] = useState(() => load("meals_v2", {}));
   const [checked, setChecked] = useState(() => load("checked_v2", {}));
+  const [activeProgramId, setActiveProgramId] = useState(() => load("activeProgram", "cut"));
   const [view, setView] = useState("plan");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [loading, setLoading] = useState(false);
   const [regenKey, setRegenKey] = useState(null);
@@ -490,6 +614,22 @@ export default function App() {
   useEffect(() => { save("settings_v2", settings); }, [settings]);
   useEffect(() => { save("meals_v2", meals); }, [meals]);
   useEffect(() => { save("checked_v2", checked); }, [checked]);
+  useEffect(() => { save("activeProgram", activeProgramId); }, [activeProgramId]);
+
+  const switchProgram = (id) => {
+    const p = PROGRAM_BY_ID[id];
+    if (!p) return;
+    setActiveProgramId(id);
+    setSettings((prev) => ({
+      ...prev,
+      kcalTarget: p.kcalTarget,
+      proteinTarget: p.proteinTarget,
+      carbsTarget: p.carbsTarget,
+      fatTarget: p.fatTarget,
+    }));
+  };
+
+  const activeProgram = PROGRAM_BY_ID[activeProgramId] || PROGRAMS[0];
 
   // Grocery list is derived from meals — no separate state needed.
   const groceryCategories = useMemo(() => consolidateGrocery(meals), [meals]);
@@ -598,64 +738,69 @@ export default function App() {
 
   const pctSum = settings.breakfastPct + settings.lunchPct + settings.dinnerPct + settings.snackPct;
 
+  // Page title varies by view + active program
+  const viewTitle = {
+    plan: "This week's menu",
+    grocery: "Grocery list",
+    pantry: "Pantry",
+    coach: "Coach",
+  }[view] || "Meals";
+
   return (
     <div className="min-h-screen bg-canvas text-ink">
-      {/* ── Top nav ──────────────────────────────────────────────── */}
-      <nav className="sticky top-0 z-20 h-16 bg-canvas border-b border-hairline">
-        <div className="max-w-[1280px] mx-auto h-full px-6 sm:px-8 flex items-center justify-between gap-4">
-          <a href="/" className="flex items-center gap-2.5 select-none">
-            <span className="w-7 h-7 rounded-sm bg-ink-deep text-white grid place-items-center text-base font-bold leading-none">M</span>
-            <span className="text-[18px] font-semibold tracking-[-0.4px] text-ink">Meals</span>
-          </a>
-          <div className="flex items-center gap-1.5">
-            <IconButton label="Sync" onClick={() => { setTransferMode(hasMeals ? "export" : "import"); setTransferOpen(true); }}>
-              <Share2 size={18} />
-            </IconButton>
-            <IconButton label="Settings" onClick={() => setShowSettings(true)}>
-              <SettingsIcon size={18} />
-            </IconButton>
-            <Button onClick={generateWeek} disabled={loading}>
-              {loading ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-              {hasMeals ? "Regenerate" : "Generate week"}
-            </Button>
-          </div>
-        </div>
-      </nav>
+      <Sidebar
+        view={view}
+        setView={setView}
+        activeProgramId={activeProgramId}
+        switchProgram={switchProgram}
+        onSettings={() => { setShowSettings(true); setSidebarOpen(false); }}
+        onSync={() => { setTransferMode(hasMeals ? "export" : "import"); setTransferOpen(true); setSidebarOpen(false); }}
+        onGenerate={() => { generateWeek(); setSidebarOpen(false); }}
+        hasMeals={hasMeals}
+        loading={loading}
+        sidebarOpen={sidebarOpen}
+        onCloseSidebar={() => setSidebarOpen(false)}
+      />
 
-      <main className="max-w-[1280px] mx-auto px-6 sm:px-8 py-10">
-        {/* ── Page heading + plan controls ─────────────────────── */}
-        <header className="flex flex-wrap items-end justify-between gap-6 mb-8">
-          <div>
-            <Eyebrow>Week 01 · Cut</Eyebrow>
-            <h1 className="mt-1.5 text-4xl sm:text-[44px] font-semibold tracking-[-0.5px] text-ink leading-[1.1]">
-              This week's menu
-            </h1>
-            <p className="mt-2 text-base text-slate max-w-[520px]">
-              {hasMeals
-                ? "Seven days · 28 meals · macro-balanced. Tap any meal for ingredients and method."
-                : "Set your targets, then generate a week. Plans rebalance to within ±1% of macros."}
-            </p>
+      <div className="lg:pl-60">
+        {/* Mobile top bar */}
+        <header className="lg:hidden sticky top-0 z-20 h-14 bg-canvas border-b border-hairline flex items-center justify-between px-4">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            aria-label="Open menu"
+            className="text-charcoal p-1.5 rounded-md hover:bg-surface-soft"
+          >
+            <MenuIcon size={20} />
+          </button>
+          <div className="flex items-center gap-2 font-semibold text-ink">
+            <span className="w-6 h-6 rounded-sm bg-ink-deep text-white grid place-items-center text-xs font-bold">M</span>
+            <span>Meals</span>
           </div>
-
-          {hasMeals && (
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="inline-flex gap-1.5 p-1 rounded-full bg-surface-soft">
-                <button
-                  onClick={() => setView("plan")}
-                  className={`px-4 py-1.5 text-sm font-medium rounded-full transition-colors ${view === "plan" ? "bg-ink-deep text-white" : "text-steel hover:text-ink"}`}
-                >
-                  Plan
-                </button>
-                <button
-                  onClick={() => setView("grocery")}
-                  className={`px-4 py-1.5 text-sm font-medium rounded-full transition-colors inline-flex items-center gap-1.5 ${view === "grocery" ? "bg-ink-deep text-white" : "text-steel hover:text-ink"}`}
-                >
-                  <ShoppingCart size={13} /> Cart
-                </button>
-              </div>
-            </div>
-          )}
+          <button
+            onClick={generateWeek}
+            disabled={loading}
+            aria-label="Regenerate"
+            className="inline-flex items-center justify-center w-9 h-9 rounded-md bg-primary text-white disabled:opacity-50"
+          >
+            {loading ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+          </button>
         </header>
+
+        <main className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-10 py-6 lg:py-10">
+          {/* ── Page heading ────────────────────────────────────── */}
+          <header className="mb-8">
+            <Eyebrow>Week 01 · {activeProgram.name}</Eyebrow>
+            <h1 className="mt-1.5 text-3xl sm:text-4xl lg:text-[44px] font-semibold tracking-[-0.5px] text-ink leading-[1.1]">
+              {viewTitle}
+            </h1>
+            {view === "plan" && (
+              <p className="mt-2 text-base text-slate max-w-[520px]">
+                {hasMeals
+                  ? "Seven days · 28 meals · macro-balanced. Tap any meal for ingredients and method."
+                  : "Set your targets, then generate a week. Plans rebalance to within ±1% of macros."}
+              </p>
+            )}
+          </header>
 
         {/* ── Error banner ─────────────────────────────────────── */}
         {error && (
@@ -668,8 +813,8 @@ export default function App() {
           </div>
         )}
 
-        {/* ── Macro stat strip ─────────────────────────────────── */}
-        {hasMeals && (
+        {/* ── Macro stat strip (Plan view only) ───────────────── */}
+        {view === "plan" && hasMeals && (
           <div
             className="mb-8 rounded-lg bg-surface border border-hairline grid grid-cols-2 md:grid-cols-4 fade-in"
           >
@@ -688,8 +833,8 @@ export default function App() {
           </div>
         )}
 
-        {/* ── Empty state ──────────────────────────────────────── */}
-        {!hasMeals && !loading && (
+        {/* ── Empty state (Plan view only) ─────────────────────── */}
+        {view === "plan" && !hasMeals && !loading && (
           <div className="py-20 sm:py-28 text-center fade-in">
             <div className="w-16 h-16 mx-auto mb-5 rounded-lg bg-surface-soft grid place-items-center text-stone">
               <ChefHat size={28} />
@@ -709,8 +854,8 @@ export default function App() {
           </div>
         )}
 
-        {/* ── Initial loading (no meals yet) ───────────────────── */}
-        {loading && !hasMeals && (
+        {/* ── Initial loading (Plan view only) ─────────────────── */}
+        {view === "plan" && loading && !hasMeals && (
           <div className="py-24 text-center fade-in">
             <Loader2 size={28} className="animate-spin text-primary mx-auto mb-4" />
             <Eyebrow className="!text-slate">Composing the week</Eyebrow>
@@ -743,15 +888,9 @@ export default function App() {
         {/* ── Grocery view: consolidated by section ────────────── */}
         {view === "grocery" && hasMeals && (
           <div className="fade-in">
-            <div className="flex items-end justify-between gap-4 mb-5">
-              <div>
-                <Eyebrow>Cart · Week 01</Eyebrow>
-                <h2 className="mt-1 text-2xl sm:text-3xl font-semibold text-ink tracking-[-0.3px]">Grocery list</h2>
-                <p className="mt-1 text-sm text-steel">
-                  {groceryItemCount} {groceryItemCount === 1 ? "item" : "items"} · sorted by aisle
-                </p>
-              </div>
-            </div>
+            <p className="text-sm text-steel mb-5">
+              {groceryItemCount} {groceryItemCount === 1 ? "item" : "items"} · sorted by aisle
+            </p>
 
             <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
               {groceryCategories.map(({ section, items }) => {
@@ -810,7 +949,35 @@ export default function App() {
             </div>
           </div>
         )}
-      </main>
+
+        {/* ── Grocery empty state ──────────────────────────────── */}
+        {view === "grocery" && !hasMeals && (
+          <ComingSoon
+            icon={ShoppingCart}
+            title="No grocery list yet"
+            description="Generate a week first — the cart populates automatically from your meals, aisle by aisle."
+          />
+        )}
+
+        {/* ── Pantry view ──────────────────────────────────────── */}
+        {view === "pantry" && (
+          <ComingSoon
+            icon={Package}
+            title="Pantry"
+            description="Track what's already in your fridge and pantry. Items you mark as in stock get subtracted from the consolidated grocery list automatically."
+          />
+        )}
+
+        {/* ── Coach view ───────────────────────────────────────── */}
+        {view === "coach" && (
+          <ComingSoon
+            icon={MessageCircle}
+            title="Coach"
+            description="Ask your on-demand nutrition coach to swap a meal, cut a day's carbs without dropping protein, or rebuild the week around a different cuisine. Powered by Claude."
+          />
+        )}
+        </main>
+      </div>
 
       {/* ── Active meal modal ──────────────────────────────────── */}
       <Modal open={!!activeMeal && !!meals[activeMeal]} onClose={() => setActiveMeal(null)} maxWidth="max-w-2xl">
