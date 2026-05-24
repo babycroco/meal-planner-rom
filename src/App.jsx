@@ -616,7 +616,6 @@ function ComingSoon({ icon: Icon, title, description }) {
 export default function App() {
   const [settings, setSettings] = useState(() => ({ ...DEFAULT_SETTINGS, ...load("settings_v2", {}) }));
   const [meals, setMeals] = useState(() => load("meals_v2", {}));
-  const [checked, setChecked] = useState(() => load("checked_v2", {}));
   const [activeProgramId, setActiveProgramId] = useState(() => load("activeProgram", "cut"));
   const [pantry, setPantry] = useState(() => load("pantry_v1", []));
   const [pantryDraft, setPantryDraft] = useState(EMPTY_PANTRY_DRAFT);
@@ -637,7 +636,6 @@ export default function App() {
 
   useEffect(() => { save("settings_v2", settings); }, [settings]);
   useEffect(() => { save("meals_v2", meals); }, [meals]);
-  useEffect(() => { save("checked_v2", checked); }, [checked]);
   useEffect(() => { save("activeProgram", activeProgramId); }, [activeProgramId]);
   useEffect(() => { save("pantry_v1", pantry); }, [pantry]);
   useEffect(() => { save("coachMessages_v1", coachMessages); }, [coachMessages]);
@@ -691,19 +689,23 @@ export default function App() {
     setCoachMessages([]);
   };
 
-  const addPantryItem = () => {
-    const trimmed = pantryDraft.item.trim();
-    const qty = Number(pantryDraft.qty);
-    if (!trimmed || !qty || qty <= 0) return;
+  // Lower-level helper: adds an item to the pantry, merging by
+  // (canonical-name, unit) when a matching row already exists.
+  // Called both from the Pantry view's add form and from the cart's
+  // "I bought it" checkbox.
+  const addToPantry = (rawItem, qty, unit, section) => {
+    const trimmed = (rawItem || "").trim();
+    const safeQty = Number(qty);
+    if (!trimmed || !safeQty || safeQty <= 0) return;
     const display = canonicalName(trimmed);
     const norm = display.toLowerCase();
     setPantry((prev) => {
       const matchIdx = prev.findIndex(
-        (p) => canonicalName(p.item).toLowerCase() === norm && p.unit === pantryDraft.unit,
+        (p) => canonicalName(p.item).toLowerCase() === norm && p.unit === unit,
       );
       if (matchIdx >= 0) {
         const next = [...prev];
-        next[matchIdx] = { ...next[matchIdx], qty: next[matchIdx].qty + qty };
+        next[matchIdx] = { ...next[matchIdx], qty: next[matchIdx].qty + safeQty };
         return next;
       }
       return [
@@ -711,12 +713,16 @@ export default function App() {
         {
           id: `p${Date.now()}${Math.floor(Math.random() * 1000)}`,
           item: display,
-          qty,
-          unit: pantryDraft.unit,
-          section: pantryDraft.section,
+          qty: safeQty,
+          unit: unit || "g",
+          section: section || "Other",
         },
       ];
     });
+  };
+
+  const addPantryItem = () => {
+    addToPantry(pantryDraft.item, pantryDraft.qty, pantryDraft.unit, pantryDraft.section);
     setPantryDraft({ ...EMPTY_PANTRY_DRAFT, unit: pantryDraft.unit, section: pantryDraft.section });
   };
 
@@ -784,7 +790,6 @@ export default function App() {
         });
         setMeals({ ...newMeals });
       }
-      setChecked({});
     } catch (e) {
       console.error(e);
       setError(e.message);
@@ -811,7 +816,7 @@ export default function App() {
   };
 
   const exportPayload = () => {
-    const payload = { v: 3, settings, meals, checked };
+    const payload = { v: 4, settings, meals, pantry };
     return btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
   };
 
@@ -839,9 +844,7 @@ export default function App() {
       if (!payload.meals) throw new Error("Invalid plan code");
       if (payload.settings) setSettings({ ...DEFAULT_SETTINGS, ...payload.settings });
       setMeals(payload.meals || {});
-      // v2 payloads keyed checked by `${recipeKey}-${index}`; v3 keys by `${item}|${unit}`.
-      // Either form coexists harmlessly — stale keys just don't match new rows.
-      setChecked(payload.checked || {});
+      if (Array.isArray(payload.pantry)) setPantry(payload.pantry);
       setImportText("");
       setTransferOpen(false);
     } catch (e) {
@@ -1017,60 +1020,54 @@ export default function App() {
             </p>
 
             <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-              {groceryCategories.map(({ section, items }) => {
-                const done = items.filter((it) => checked[it.key]).length;
-                const allDone = done === items.length && items.length > 0;
-                return (
-                  <div
-                    key={section}
-                    className="bg-canvas rounded-lg border border-hairline p-5 transition-opacity"
-                    style={{ opacity: allDone ? 0.55 : 1 }}
-                  >
-                    <div className="flex items-center justify-between gap-3 mb-3 pb-3 border-b border-hairline-soft">
-                      <Eyebrow>{section}</Eyebrow>
-                      <span className="shrink-0 text-xs text-stone font-medium tnum">
-                        {done}/{items.length}
-                      </span>
-                    </div>
-                    <ul className="space-y-1">
-                      {items.map((ing) => {
-                        const isChecked = !!checked[ing.key];
-                        return (
-                          <li key={ing.key}>
-                            <button
-                              onClick={() => setChecked((p) => ({ ...p, [ing.key]: !p[ing.key] }))}
-                              className="w-full flex items-center gap-3 py-1.5 px-1 text-left rounded-sm hover:bg-surface-soft transition-colors"
-                            >
-                              <span
-                                className="w-4 h-4 rounded-xs grid place-items-center shrink-0 border transition-colors"
-                                style={{
-                                  background: isChecked ? "var(--primary)" : "transparent",
-                                  borderColor: isChecked ? "var(--primary)" : "var(--hairline-strong)",
-                                }}
-                              >
-                                {isChecked && <Check size={11} strokeWidth={3} className="text-white" />}
-                              </span>
-                              <span
-                                className="flex-1 text-sm capitalize"
-                                style={{
-                                  color: isChecked ? "var(--stone)" : "var(--ink)",
-                                  textDecoration: isChecked ? "line-through" : "none",
-                                }}
-                              >
-                                {ing.item}
-                              </span>
-                              <span className="text-xs tnum text-steel font-medium shrink-0">
-                                {ing.qty} {ing.unit}
-                              </span>
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
+              {groceryCategories.map(({ section, items }) => (
+                <div
+                  key={section}
+                  className="bg-canvas rounded-lg border border-hairline p-5"
+                >
+                  <div className="flex items-center justify-between gap-3 mb-3 pb-3 border-b border-hairline-soft">
+                    <Eyebrow>{section}</Eyebrow>
+                    <span className="shrink-0 text-xs text-stone font-medium tnum">
+                      {items.length} {items.length === 1 ? "item" : "items"}
+                    </span>
                   </div>
-                );
-              })}
+                  <ul className="space-y-1">
+                    {items.map((ing) => (
+                      <li key={ing.key}>
+                        <button
+                          onClick={() => addToPantry(ing.item, ing.qty, ing.unit, ing.section || section)}
+                          title="Mark as bought — adds to pantry"
+                          className="group w-full flex items-center gap-3 py-1.5 px-1 text-left rounded-sm hover:bg-surface-soft transition-colors"
+                        >
+                          <span
+                            className="w-4 h-4 rounded-xs grid place-items-center shrink-0 border border-hairline-strong group-hover:border-primary group-hover:bg-primary/10 transition-colors"
+                          />
+                          <span className="flex-1 text-sm capitalize text-ink">
+                            {ing.item}
+                          </span>
+                          <span className="text-xs tnum text-steel font-medium shrink-0">
+                            {ing.qty} {ing.unit}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
             </div>
+          </div>
+        )}
+
+        {/* ── Grocery: everything bought / all in pantry ───────── */}
+        {view === "grocery" && hasMeals && groceryItemCount === 0 && (
+          <div className="py-12 text-center fade-in">
+            <div className="w-12 h-12 mx-auto mb-4 rounded-lg bg-tint-mint grid place-items-center text-brand-green">
+              <Check size={22} strokeWidth={3} />
+            </div>
+            <h2 className="text-xl font-semibold text-ink">Cart's empty</h2>
+            <p className="mt-2 text-sm text-slate max-w-[360px] mx-auto">
+              Everything for this week is in your pantry. Generate a new week or add more items to your plan.
+            </p>
           </div>
         )}
 
