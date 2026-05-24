@@ -23,9 +23,12 @@ PRIORITIES, in order:
 3. Respect the prep-time constraint given for each meal.
 
 INGREDIENT RULES:
-- Use standard German supermarket items (Rewe/Edeka): Magerquark, Skyr, Hähnchenbrust, Lachs, Tofu, Linsen, Haferflocken, Vollkornbrot, etc.
+- Use standard German supermarket items (Rewe/Edeka). ALWAYS write the ingredient name in GERMAN — never the English equivalent. The grocery list deduplicates by exact name, so any English/German mix creates duplicate rows.
+- Canonical names you MUST use (never the English form): Banane (not Banana), Hähnchenbrust (not Chicken Breast), Hähnchenschenkel (not Chicken Thigh), Putenbrust (not Turkey), Lachsfilet (not Salmon Fillet), Rindfleisch (not Beef), Lammhackfleisch (not Lamb Mince), Thunfisch (not Tuna), Hüttenkäse (not Cottage Cheese), Eier (not Eggs), Eiweiß (not Egg Whites), Milch (not Milk), Griechischer Joghurt (not Greek Yogurt), Linsen (not Lentils), Kichererbsen (not Chickpeas), Haferflocken (not Oats), Vollkornbrot (not Whole Grain Bread), Eiweißbrot (not Protein Bread), Walnüsse (not Walnuts), Mandeln (not Almonds), Erdnussbutter (not Peanut Butter), Mandelbutter (not Almond Butter), Honig (not Honey), Sojasauce (not Soy Sauce), Olivenöl (not Olive Oil), Gurke (not Cucumber), Knoblauch (not Garlic), Ingwer (not Ginger), Petersilie (not Parsley), Zitronensaft (not Lemon Juice), Zitrone (not Lemon), Paprika (not Bell Pepper), Tomate (not Tomato), Kirschtomaten (not Cherry Tomatoes), Frühlingszwiebeln (not Spring Onions/Scallions), Rote Zwiebel (not Red Onion), Babyspinat (not Baby Spinach), Spinat (not Spinach), Brokkoli (not Broccoli), Karotte (not Carrot), Kürbiskerne (not Pumpkin Seeds), Sobanudeln (not Soba Noodles), Jasminreis (not Jasmine Rice), Reis (not Rice). Skyr, Magerquark, Bulgur, Hummus, Tofu, Feta, Mango, Avocado, Zucchini, Mozzarella, Pak Choi, Edamame are spelled the same in both languages — use them as-is.
+- Use the EXACT same name for an ingredient across every meal in the entire week. Do not vary between equivalent terms (no "Skyr" in one meal and "Skyr (Natur)" in another).
+- NEVER add parenthetical clarifications to ingredient names. Write "Hähnchenbrust" — never "Hähnchenbrust (Pre-Cooked)", "Hähnchenbrust (Sliced)", "Hähnchenbrust (Rotisserie)", "Mango (Gefroren)", "Ingwer (Frisch)", "Paprika (Rot und Gelb)". Parentheticals create unwanted duplicate rows on the grocery list.
 - 4-8 ingredients per meal; snacks 2-4.
-- Favor weight-loss-friendly high-protein staples: chicken breast, lean beef, white fish, salmon, eggs, Magerquark, Skyr, cottage cheese, lentils, tofu.
+- Favor weight-loss-friendly high-protein staples: Hähnchenbrust, Rindfleisch, Lachsfilet, weißer Fisch, Eier, Magerquark, Skyr, Hüttenkäse, Linsen, Tofu.
 
 PREP-TIME TIERS: "5" = no-cook / assembly only, "15" = ≤15 min, "30" = ≤30 min, "60" = 30+ min.
 - Breakfast: prefer "5" (overnight oats, skyr bowls, cottage cheese plates).

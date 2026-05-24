@@ -59,13 +59,188 @@ const TIME_COLORS = {
 
 // Ingredient section order on the consolidated grocery list. Matches the
 // enum in api/generate-meals.js MEAL_SCHEMA — the API tags every ingredient
-// with one of these, so the data is already aisle-sorted at the source.
+// with one of these, so the data is already aisle-sortable at the source.
 const SECTION_ORDER = ["Produce", "Meat & Fish", "Dairy & Eggs", "Pantry", "Frozen", "Bakery", "Other"];
 
+// Curated alias map for grocery-list dedup. Keys are paren-stripped lowercase
+// variants; values are the canonical German display name. The LLM is
+// instructed to use German names but occasionally outputs English equivalents
+// or adds parenthetical clarifications like "(Pre-Cooked)" / "(Natur)" — both
+// become duplicate rows without normalization.
+const INGREDIENT_ALIAS = {
+  // Produce
+  "banana": "Banane",
+  "banane": "Banane",
+  "cucumber": "Gurke",
+  "gurke": "Gurke",
+  "garlic": "Knoblauch",
+  "knoblauch": "Knoblauch",
+  "fresh ginger": "Ingwer",
+  "ginger": "Ingwer",
+  "ingwer": "Ingwer",
+  "fresh parsley": "Petersilie",
+  "parsley": "Petersilie",
+  "petersilie": "Petersilie",
+  "lemon juice": "Zitronensaft",
+  "zitronensaft": "Zitronensaft",
+  "lemon": "Zitrone",
+  "zitrone": "Zitrone",
+  "red onion": "Rote Zwiebel",
+  "rote zwiebel": "Rote Zwiebel",
+  "onion": "Zwiebel",
+  "zwiebel": "Zwiebel",
+  "bell pepper": "Paprika",
+  "paprika": "Paprika",
+  "paprika rot und gelb": "Paprika",
+  "cherry tomatoes": "Kirschtomaten",
+  "cherrytomaten": "Kirschtomaten",
+  "kirschtomaten": "Kirschtomaten",
+  "tomato": "Tomate",
+  "tomate": "Tomate",
+  "spring onions": "Frühlingszwiebeln",
+  "scallions": "Frühlingszwiebeln",
+  "frühlingszwiebeln": "Frühlingszwiebeln",
+  "baby spinach": "Babyspinat",
+  "babyspinat": "Babyspinat",
+  "spinach": "Spinat",
+  "spinat": "Spinat",
+  "zucchini": "Zucchini",
+  "mango": "Mango",
+  "mango gefroren oder frisch": "Mango",
+  "schnittlauch": "Schnittlauch",
+  "chives": "Schnittlauch",
+  "avocado": "Avocado",
+  "broccoli": "Brokkoli",
+  "brokkoli": "Brokkoli",
+  "pak choi": "Pak Choi",
+  "carrot": "Karotte",
+  "carrots": "Karotte",
+  "karotte": "Karotte",
+
+  // Meat & Fish
+  "chicken breast": "Hähnchenbrust",
+  "hähnchenbrust": "Hähnchenbrust",
+  "hähnchenbrust pre-cooked or rotisserie": "Hähnchenbrust",
+  "hähnchenbrust pre-cooked or sliced deli": "Hähnchenbrust",
+  "salmon fillet": "Lachsfilet",
+  "salmon": "Lachsfilet",
+  "lachsfilet": "Lachsfilet",
+  "lachs": "Lachsfilet",
+  "lean lamb mince": "Lammhackfleisch",
+  "lamb mince": "Lammhackfleisch",
+  "lammhackfleisch": "Lammhackfleisch",
+  "chicken thigh": "Hähnchenschenkel",
+  "chicken thighs": "Hähnchenschenkel",
+  "hähnchenschenkel": "Hähnchenschenkel",
+  "hähnchenschenkel ohne knochen und haut": "Hähnchenschenkel",
+  "turkey breast": "Putenbrust",
+  "putenbrust": "Putenbrust",
+  "putenbrust aufschnitt": "Putenbrust",
+  "tuna": "Thunfisch",
+  "canned tuna": "Thunfisch",
+  "thunfisch": "Thunfisch",
+  "lean beef": "Rindfleisch",
+  "beef": "Rindfleisch",
+  "rindfleisch": "Rindfleisch",
+  "shrimp": "Garnelen",
+  "garnelen": "Garnelen",
+
+  // Dairy & Eggs
+  "cottage cheese": "Hüttenkäse",
+  "hüttenkäse": "Hüttenkäse",
+  "feta": "Feta",
+  "feta cheese": "Feta",
+  "skyr": "Skyr",
+  "skyr natur": "Skyr",
+  "low-fat milk": "Milch",
+  "milk": "Milch",
+  "milch": "Milch",
+  "magerquark": "Magerquark",
+  "eggs": "Eier",
+  "egg": "Eier",
+  "eier": "Eier",
+  "egg whites": "Eiweiß",
+  "eiweiß": "Eiweiß",
+  "eiweiss": "Eiweiß",
+  "greek yogurt": "Griechischer Joghurt",
+  "griechischer joghurt": "Griechischer Joghurt",
+  "griechischer joghurt 2%": "Griechischer Joghurt",
+  "natural yogurt": "Naturjoghurt",
+  "naturjoghurt": "Naturjoghurt",
+  "naturjoghurt fettarm": "Naturjoghurt",
+  "yogurt": "Joghurt",
+  "joghurt": "Joghurt",
+  "mozzarella": "Mozzarella",
+
+  // Pantry
+  "oats": "Haferflocken",
+  "rolled oats": "Haferflocken",
+  "haferflocken": "Haferflocken",
+  "honey": "Honig",
+  "honig": "Honig",
+  "walnuts": "Walnüsse",
+  "walnut": "Walnüsse",
+  "walnüsse": "Walnüsse",
+  "almonds": "Mandeln",
+  "mandeln": "Mandeln",
+  "olive oil": "Olivenöl",
+  "olivenöl": "Olivenöl",
+  "soy sauce": "Sojasauce",
+  "sojasauce": "Sojasauce",
+  "rice": "Reis",
+  "reis": "Reis",
+  "jasmine rice": "Jasminreis",
+  "jasminreis": "Jasminreis",
+  "bulgur": "Bulgur",
+  "lentils": "Linsen",
+  "linsen": "Linsen",
+  "chickpeas": "Kichererbsen",
+  "kichererbsen": "Kichererbsen",
+  "hummus": "Hummus",
+  "tofu": "Tofu",
+  "whole grain bread": "Vollkornbrot",
+  "vollkornbrot": "Vollkornbrot",
+  "protein bread": "Eiweißbrot",
+  "eiweißbrot": "Eiweißbrot",
+  "eiweissbrot": "Eiweißbrot",
+  "peanut butter": "Erdnussbutter",
+  "erdnussbutter": "Erdnussbutter",
+  "almond butter": "Mandelbutter",
+  "mandelbutter": "Mandelbutter",
+  "soba noodles": "Sobanudeln",
+  "sobanudeln": "Sobanudeln",
+  "pumpkin seeds": "Kürbiskerne",
+  "kürbiskerne": "Kürbiskerne",
+  "white beans": "Weiße Bohnen",
+  "weiße bohnen": "Weiße Bohnen",
+  "edamame": "Edamame",
+  "tomato paste": "Tomatenmark",
+  "tomatenmark": "Tomatenmark",
+  "tabbouleh": "Tabbouleh",
+};
+
+// Strip parenthetical clarifications and collapse whitespace.
+//   "Hähnchenbrust (Pre-Cooked Or Rotisserie)" → "Hähnchenbrust"
+//   "Mango (Gefroren Oder Frisch)" → "Mango"
+function stripParens(s) {
+  return (s || "")
+    .replace(/\s*\([^)]*\)\s*/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// Apply the alias map to collapse EN/DE variants and paren-decorated forms
+// into one canonical (German) display name. Unmatched items fall through
+// unchanged, just paren-stripped.
+function canonicalName(item) {
+  const cleaned = stripParens(item);
+  const key = cleaned.toLowerCase();
+  return INGREDIENT_ALIAS[key] || cleaned;
+}
+
 // Aggregate all 28 meals' ingredients into one list per section, summing
-// quantities when the same (item, unit) pair appears across multiple meals.
-// Item names are matched case-insensitively. Different units stay separate
-// (no conversions — "2 piece" + "300g" remain distinct rows).
+// quantities when (canonical-name, unit) match across meals. Different units
+// stay separate (no conversions — "2 piece" + "300g" remain distinct rows).
 function consolidateGrocery(meals) {
   const buckets = {};
   for (const day of DAYS) {
@@ -74,12 +249,13 @@ function consolidateGrocery(meals) {
       if (!m?.ingredients?.length) continue;
       for (const ing of m.ingredients) {
         const section = ing.section || "Other";
-        const key = `${(ing.item || "").trim().toLowerCase()}|${ing.unit || ""}`;
+        const display = canonicalName(ing.item);
+        const key = `${display.toLowerCase()}|${ing.unit || ""}`;
         if (!buckets[section]) buckets[section] = {};
         if (buckets[section][key]) {
           buckets[section][key].qty += ing.qty || 0;
         } else {
-          buckets[section][key] = { ...ing, key };
+          buckets[section][key] = { ...ing, item: display, key };
         }
       }
     }
