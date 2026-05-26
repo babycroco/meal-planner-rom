@@ -363,6 +363,59 @@ function roundQty(qty) {
   return r;
 }
 
+// Same idea as consolidateGrocery but for the pantry array: merge entries
+// sharing a canonical name into a single row in the largest same-family
+// unit used. Used both for cleaning up historical pantry dupes on load
+// and for merging on every addToPantry call.
+function consolidatePantry(items) {
+  if (!Array.isArray(items) || items.length === 0) return [];
+
+  // Pass 1: pick the largest unit per canonical name (across all sections).
+  const preferred = {};
+  for (const p of items) {
+    const cname = canonicalName(p.item || "").toLowerCase();
+    const unit = p.unit || "";
+    if (!UNIT_INFO[unit] || !cname) continue;
+    const current = preferred[cname];
+    if (!current) {
+      preferred[cname] = unit;
+    } else if (
+      UNIT_INFO[current] &&
+      UNIT_INFO[current].family === UNIT_INFO[unit].family &&
+      UNIT_INFO[unit].toBase > UNIT_INFO[current].toBase
+    ) {
+      preferred[cname] = unit;
+    }
+  }
+
+  // Pass 2: merge by (cname, unit). Cross-family dupes (Ingwer g vs tsp)
+  // stay as separate rows since weight↔volume conversion needs density.
+  const buckets = {};
+  for (const p of items) {
+    const display = canonicalName(p.item || "");
+    const cname = display.toLowerCase();
+    if (!cname) continue;
+    let qty = p.qty || 0;
+    let unit = p.unit || "";
+    const target = preferred[cname];
+    if (target && target !== unit) {
+      const converted = convertUnit(qty, unit, target);
+      if (converted !== null) {
+        qty = converted;
+        unit = target;
+      }
+    }
+    const key = `${cname}|${unit}`;
+    if (buckets[key]) {
+      buckets[key].qty += qty;
+    } else {
+      buckets[key] = { ...p, item: display, qty, unit };
+    }
+  }
+
+  return Object.values(buckets).map((b) => ({ ...b, qty: roundQty(b.qty) }));
+}
+
 // Strip parenthetical clarifications, prep-state prefixes, ingredient
 // suffixes, and collapse whitespace. Pipeline:
 //   1. Drop everything inside "(...)" — "Hähnchenbrust (Pre-Cooked)" → "Hähnchenbrust"
@@ -814,7 +867,7 @@ export default function App() {
   const [settings, setSettings] = useState(() => ({ ...DEFAULT_SETTINGS, ...load("settings_v2", {}) }));
   const [meals, setMeals] = useState(() => load("meals_v2", {}));
   const [activeProgramId, setActiveProgramId] = useState(() => load("activeProgram", "cut"));
-  const [pantry, setPantry] = useState(() => load("pantry_v1", []));
+  const [pantry, setPantry] = useState(() => consolidatePantry(load("pantry_v1", [])));
   const [pantryDraft, setPantryDraft] = useState(EMPTY_PANTRY_DRAFT);
   const [coachMessages, setCoachMessages] = useState(() => load("coachMessages_v1", []));
   const [coachInput, setCoachInput] = useState("");
@@ -886,26 +939,17 @@ export default function App() {
     setCoachMessages([]);
   };
 
-  // Lower-level helper: adds an item to the pantry, merging by
-  // (canonical-name, unit) when a matching row already exists.
-  // Called both from the Pantry view's add form and from the cart's
-  // "I bought it" checkbox.
+  // Lower-level helper: adds an item to the pantry, then runs the full
+  // same-family-unit consolidation so any existing matching row (in the
+  // same unit family) gets merged. Called both from the Pantry view's
+  // add form and from the cart's "I bought it" checkbox.
   const addToPantry = (rawItem, qty, unit, section) => {
     const trimmed = (rawItem || "").trim();
     const safeQty = Number(qty);
     if (!trimmed || !safeQty || safeQty <= 0) return;
     const display = canonicalName(trimmed);
-    const norm = display.toLowerCase();
-    setPantry((prev) => {
-      const matchIdx = prev.findIndex(
-        (p) => canonicalName(p.item).toLowerCase() === norm && p.unit === unit,
-      );
-      if (matchIdx >= 0) {
-        const next = [...prev];
-        next[matchIdx] = { ...next[matchIdx], qty: next[matchIdx].qty + safeQty };
-        return next;
-      }
-      return [
+    setPantry((prev) =>
+      consolidatePantry([
         ...prev,
         {
           id: `p${Date.now()}${Math.floor(Math.random() * 1000)}`,
@@ -914,8 +958,8 @@ export default function App() {
           unit: unit || "g",
           section: section || "Other",
         },
-      ];
-    });
+      ]),
+    );
   };
 
   const addPantryItem = () => {
