@@ -327,7 +327,41 @@ const INGREDIENT_ALIAS = {
   "fester tofu": "Tofu",
   "räuchertofu": "Tofu",
   "smoked tofu": "Tofu",
+  "whey protein": "Whey Protein",
+  "whey protein powder": "Whey Protein",
+  "molkenprotein": "Whey Protein",
+  "protein pulver": "Whey Protein",
+  "za'atar": "Za'atar",
+  "zaatar": "Za'atar",
 };
+
+// Unit-family map for same-family auto-conversion. Cross-family dupes
+// (weight vs volume vs count) stay as separate cart rows since converting
+// requires per-ingredient density.
+const UNIT_INFO = {
+  g:     { family: "weight", toBase: 1 },
+  kg:    { family: "weight", toBase: 1000 },
+  ml:    { family: "volume", toBase: 1 },
+  l:     { family: "volume", toBase: 1000 },
+  tsp:   { family: "volume", toBase: 5 },
+  tbsp:  { family: "volume", toBase: 15 },
+  piece: { family: "count",  toBase: 1 },
+};
+
+// Convert qty from one unit to another within the same family.
+// Returns null if conversion isn't possible (different families or unknown unit).
+function convertUnit(qty, fromUnit, toUnit) {
+  const from = UNIT_INFO[fromUnit];
+  const to = UNIT_INFO[toUnit];
+  if (!from || !to || from.family !== to.family) return null;
+  return (qty * from.toBase) / to.toBase;
+}
+
+// Round to 1 decimal for display; drop trailing .0.
+function roundQty(qty) {
+  const r = Math.round(qty * 10) / 10;
+  return r;
+}
 
 // Strip parenthetical clarifications, prep-state prefixes, ingredient
 // suffixes, and collapse whitespace. Pipeline:
@@ -364,12 +398,43 @@ function canonicalName(item) {
   return INGREDIENT_ALIAS[key] || cleaned;
 }
 
-// Aggregate all 28 meals' ingredients into one list per section, summing
-// quantities when (canonical-name, unit) match across meals. Different units
-// stay separate (no conversions — "2 piece" + "300g" remain distinct rows).
-// Pantry items are subtracted by canonical-name + unit; rows that go to zero
-// or below are dropped entirely (already covered by the pantry).
+// Aggregate all 28 meals' ingredients into one list per section.
+// Items with the same canonical name AND a convertible unit (volume↔volume,
+// weight↔weight) merge into a single row, converted to the LARGEST unit in
+// the family that was used (so Sesamöl tsp+tbsp shows as tbsp, not tsp).
+// Cross-family dupes (Ingwer 80g vs Ingwer 1 tsp) stay as separate rows
+// since weight↔volume conversion needs per-ingredient density.
+// Pantry items subtract the same way.
 function consolidateGrocery(meals, pantry = []) {
+  // Pass 1: pick the preferred unit per (section, canonical-name) — the
+  // largest unit in any unit family that was used.
+  const preferredUnit = {}; // section → cname → unit
+  const considerUnit = (section, cname, unit) => {
+    if (!UNIT_INFO[unit]) return;
+    if (!preferredUnit[section]) preferredUnit[section] = {};
+    const current = preferredUnit[section][cname];
+    if (!current) {
+      preferredUnit[section][cname] = unit;
+    } else if (
+      UNIT_INFO[current] &&
+      UNIT_INFO[current].family === UNIT_INFO[unit].family &&
+      UNIT_INFO[unit].toBase > UNIT_INFO[current].toBase
+    ) {
+      preferredUnit[section][cname] = unit;
+    }
+  };
+  for (const day of DAYS) {
+    for (const slot of SLOTS) {
+      const m = meals[`${day}-${slot}`];
+      if (!m?.ingredients?.length) continue;
+      for (const ing of m.ingredients) {
+        considerUnit(ing.section || "Other", canonicalName(ing.item).toLowerCase(), ing.unit || "");
+      }
+    }
+  }
+
+  // Pass 2: aggregate into the preferred unit. Cross-family rows fall into
+  // separate buckets keyed by `${cname}|${unit}`.
   const buckets = {};
   for (const day of DAYS) {
     for (const slot of SLOTS) {
@@ -378,24 +443,46 @@ function consolidateGrocery(meals, pantry = []) {
       for (const ing of m.ingredients) {
         const section = ing.section || "Other";
         const display = canonicalName(ing.item);
-        const key = `${display.toLowerCase()}|${ing.unit || ""}`;
+        const cname = display.toLowerCase();
+        let qty = ing.qty || 0;
+        let unit = ing.unit || "";
+        const target = preferredUnit[section]?.[cname];
+        if (target && target !== unit) {
+          const converted = convertUnit(qty, unit, target);
+          if (converted !== null) {
+            qty = converted;
+            unit = target;
+          }
+          // else: different family — keep original unit, separate bucket
+        }
+        const key = `${cname}|${unit}`;
         if (!buckets[section]) buckets[section] = {};
         if (buckets[section][key]) {
-          buckets[section][key].qty += ing.qty || 0;
+          buckets[section][key].qty += qty;
         } else {
-          buckets[section][key] = { ...ing, item: display, key };
+          buckets[section][key] = { ...ing, item: display, cname, qty, unit, key };
         }
       }
     }
   }
 
+  // Pantry subtraction — convert pantry qty into the matching bucket's unit
+  // when possible; cross-family pantry items just don't subtract.
   for (const p of pantry) {
-    const display = canonicalName(p.item);
-    const key = `${display.toLowerCase()}|${p.unit || ""}`;
+    const cname = canonicalName(p.item).toLowerCase();
+    const qty = p.qty || 0;
+    const unit = p.unit || "";
+    let subtracted = false;
     for (const section of Object.keys(buckets)) {
-      if (buckets[section][key]) {
-        buckets[section][key].qty -= p.qty || 0;
-        if (buckets[section][key].qty <= 0) delete buckets[section][key];
+      if (subtracted) break;
+      for (const key of Object.keys(buckets[section])) {
+        const entry = buckets[section][key];
+        if (entry.cname !== cname) continue;
+        const converted = convertUnit(qty, unit, entry.unit);
+        if (converted === null) continue;
+        entry.qty -= converted;
+        if (entry.qty <= 0) delete buckets[section][key];
+        subtracted = true;
         break;
       }
     }
@@ -405,7 +492,9 @@ function consolidateGrocery(meals, pantry = []) {
     .filter((s) => buckets[s] && Object.keys(buckets[s]).length > 0)
     .map((section) => ({
       section,
-      items: Object.values(buckets[section]).sort((a, b) => a.item.localeCompare(b.item)),
+      items: Object.values(buckets[section])
+        .map((it) => ({ ...it, qty: roundQty(it.qty) }))
+        .sort((a, b) => a.item.localeCompare(b.item)),
     }));
 }
 
