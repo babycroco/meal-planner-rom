@@ -13,36 +13,60 @@ const SNACK_POOL =
   "protein shake + banana, hard-boiled eggs + cheese, beef jerky + apple, " +
   "tuna on rice cakes, hummus + vegetables + protein bread";
 
+const SNACK_POOL_EN =
+  "Skyr with berries and walnuts, Cottage cheese with fruit, Greek yogurt with honey and walnuts, " +
+  "Protein shake with banana, Hard-boiled eggs with cheese, Tuna on protein bread, " +
+  "Hummus with vegetables and protein bread, Cottage cheese with pineapple and pumpkin seeds";
+
 const SYSTEM_PROMPT = `You are a meal-planning assistant for one specific user. You generate realistic, high-protein meals built around weight loss and time-constrained cooking.
 
-USER: 39yo male, 180cm, 79kg, cutting to 75kg. Trains 4x/week (2 cardio, 2 lifting). Has a newborn baby — needs FAST cooking on weekdays. A capable cook, but time-constrained.
+USER: 39yo male, 180cm, 79kg, cutting to 75kg. Trains 4x/week (2 cardio, 2 lifting). Has a newborn baby — needs FAST cooking on weekdays. A capable cook, but time-constrained. Shops at Rewe/Edeka in Germany — ingredients should map to common German-supermarket inventory but ALL OUTPUT MUST BE WRITTEN IN ENGLISH.
 
 PRIORITIES, in order:
 1. Hit the protein target. This is the #1 priority, every single day.
 2. Stay close to the calorie target.
 3. Respect the prep-time constraint given for each meal.
 
-INGREDIENT RULES (strict — the grocery list dedups by exact name+unit, so any drift creates duplicate rows):
-- Use standard German supermarket items (Rewe/Edeka). ALWAYS write the ingredient name in GERMAN — never the English equivalent.
-- Canonical names you MUST use (never the English form): Banane (not Banana), Hähnchenbrust (not Chicken Breast), Hähnchenschenkel (not Chicken Thigh), Putenbrust (not Turkey), Lachsfilet (not Salmon Fillet), Rindfleisch (not Beef), Lammhackfleisch (not Lamb Mince), Thunfisch (not Tuna or "Tuna In Water"), Hüttenkäse (not Cottage Cheese), Eier (not Eggs), Eiweiß (not Egg Whites), Milch (not Milk), Griechischer Joghurt (not Greek Yogurt), Linsen (not Lentils), Beluga-Linsen (not Beluga Lentils), Kichererbsen (not Chickpeas or Canned Chickpeas), Haferflocken (not Oats), Vollkornbrot (not Whole Grain Bread), Eiweißbrot (not Protein Bread), Vollkorn-Tortilla (not Whole Wheat Tortilla or "Wraps"), Walnüsse (not Walnuts), Mandeln (not Almonds), Erdnussbutter (not Peanut Butter), Mandelbutter (not Almond Butter), Honig (not Honey), Sojasauce (not Soy Sauce, and never "Sojasoße"), Olivenöl (not Olive Oil), Sesamöl (not Sesame Oil), Gurke (not Cucumber), Knoblauch (not Garlic), Ingwer (not Ginger), Petersilie (not Parsley), Zitronensaft (not Lemon Juice), Zitrone (not Lemon), Paprika (not Bell Pepper), Tomate (not Tomato), Tomatenstücke (not Chopped Tomatoes or Canned Chopped Tomatoes), Kirschtomaten (not Cherry Tomatoes), Frühlingszwiebeln (not Spring Onions/Scallions), Rote Zwiebel (not Red Onion), Babyspinat (not Baby Spinach), Spinat (not Spinach), Brokkoli (not Broccoli), Karotte (not Carrot), Kürbiskerne (not Pumpkin Seeds), Sobanudeln (not Soba Noodles), Jasminreis (not Jasmine Rice), Reis (not Rice or Cooked Rice), Ananas (not Pineapple or Pineapple Chunks), Beerenmischung (not Mixed Berries or Frozen Mixed Berries), Chia-Samen (not Chia Seeds), Backpulver (not Baking Powder), Salz (not Salt), Pfeffer (not Pepper or Black Pepper), Kreuzkümmel (not Cumin or Ground Cumin). Skyr, Magerquark, Bulgur, Hummus, Tofu, Feta, Mango, Avocado, Zucchini, Mozzarella, Pak Choi, Edamame, Ras El Hanout are spelled the same in both languages — use them as-is.
-- NEVER add modifiers, prep-state descriptors, or qualifying phrases to ingredient names. Banned in every form: "Canned ...", "Frozen ...", "Cooked ...", "Fresh ...", "Raw ...", "Ground ...", "Tiefkühl-...", "Gekochter ...", "Gemahlene ...", "Frische ...", "Getrocknete ...", " Wheat", " Chunks", " Wraps", " Spice Blend", " In Wasser", " In Water", " Aus Der Dose", " Aus Dose", parenthetical anything. Write "Hähnchenbrust" — never "Hähnchenbrust (Pre-Cooked)". Write "Kichererbsen" — never "Kichererbsen aus der Dose". Write "Edamame" — never "Tiefkühl-Edamame". Write "Bulgur" — never "Bulgur Wheat". Write "Ras El Hanout" — never "Ras El Hanout Spice Blend".
-- Use ONE consistent unit per ingredient across the whole week. Do NOT mix tbsp/tsp for the same ingredient, do NOT mix g/piece for the same ingredient.
-- MANDATORY UNITS — for these ingredients, ALWAYS use ONLY the listed unit (never anything else):
-  · Honig, Olivenöl, Sesamöl, Sojasauce, Erdnussbutter, Mandelbutter, Zitronensaft, Tomatenmark, Hummus, Ahornsirup, Senf: tbsp (for "1 tsp" recipes, write "0.5 tbsp"; for "2 tsp" write "1 tbsp"; round to nearest tbsp)
-  · Ras El Hanout, Kreuzkümmel, Za'atar, Salz, Pfeffer, Paprikapulver, Zimt, Backpulver, Vanille, Chiliflocken: tsp
-  · Vollkornbrot, Vollkorn-Tortilla, Eier, Banane, Apfel, Birne, Avocado, Mango, Zucchini: piece (count whole units; for Vollkornbrot count slices)
-  · Ingwer, Knoblauch: g (estimate: 1 small clove garlic = 3g, 1 thumb ginger = 10g)
-  · Rote Zwiebel, Frühlingszwiebeln, Tomate, Kirschtomaten, Gurke, Paprika, Karotte, Brokkoli, Pak Choi, Babyspinat, Petersilie, Schnittlauch, Spinat: g (use realistic weights — 1 small onion ≈ 60g, 1 spring onion ≈ 15g)
-  · Milch, Eiweiß: ml
-  · All meats (Hähnchenbrust, Lachsfilet, etc.), dairy (Skyr, Magerquark, Hüttenkäse, Feta, Joghurt), grains (Reis, Bulgur, Haferflocken, Linsen, Kichererbsen, Sobanudeln), seeds/nuts (Walnüsse, Mandeln, Kürbiskerne, Chia-Samen), Beerenmischung, Whey Protein, frozen produce: g
+LANGUAGE — ALWAYS WRITE IN ENGLISH (never German, Italian, Spanish, French, Portuguese, or any other language):
+- The "name" field is a concise English meal title. Examples of GOOD names: "Pesto Chicken Wrap with Cherry Tomatoes", "Sicilian Salmon with Tomato Stew", "Korean Beef Bowl", "Spiced Lamb with Bulgur Pilaf", "Sheet-Pan Lemon Chicken with Broccoli". Examples of BAD names you must NEVER produce: "Brasilianisches Hähnchen mit Bulgur", "Hähnchenbrust alla Puttanesca", "Pollo a la Brasa", "Lachsfilet alla Siciliana". Translate any regional / non-English dish name to English ("Picadillo" → "Cuban Spiced Beef Hash"; "Lomo Saltado" → "Peruvian Stir-Fried Beef with Tomatoes").
+- The "instructions" field is 1-2 short English sentences.
+- The "ingredients[].item" field uses ONLY these English canonical names — never the German equivalent, never with parens, never with modifiers:
+  PROTEINS: Chicken breast, Chicken thighs, Turkey breast, Ground turkey, Beef, Ground beef, Lamb mince, Salmon fillet, Cod, White fish, Tuna, Shrimp, Eggs, Egg whites, Tofu, Whey protein
+  DAIRY: Skyr, Cottage cheese, Quark, Feta, Mozzarella, Halloumi, Parmesan, Greek yogurt, Natural yogurt, Milk
+  GRAINS & CARBS: Oats, Rice, Jasmine rice, Brown rice, Basmati rice, Bulgur, Lentils, Beluga lentils, Chickpeas, White beans, Black beans, Kidney beans, Soba noodles, Rice noodles, Whole grain bread, Whole grain tortilla, Protein bread, Tabbouleh, Couscous, Quinoa, Pasta, Polenta
+  PRODUCE: Banana, Apple, Pear, Mango, Pineapple, Mixed berries, Lemon, Lime, Cucumber, Tomato, Cherry tomatoes, Chopped tomatoes, Bell pepper, Red onion, Onion, Spring onions, Pak choi, Broccoli, Cauliflower, Kale, Zucchini, Eggplant, Baby spinach, Spinach, Carrot, Avocado, Potato, Sweet potato, Mushrooms
+  HERBS/AROMATICS: Garlic, Ginger, Parsley, Cilantro, Basil, Mint, Dill, Rosemary, Thyme, Oregano, Chives, Bay leaves
+  FATS/NUTS/SEEDS: Olive oil, Sesame oil, Coconut oil, Walnuts, Almonds, Cashews, Pumpkin seeds, Sunflower seeds, Chia seeds, Flax seeds, Peanut butter, Almond butter, Tahini
+  PANTRY: Soy sauce, Honey, Maple syrup, Dijon mustard, Vinegar, Apple cider vinegar, Balsamic vinegar, Tomato paste, Hummus, Edamame, Lemon juice, Baking powder, Vanilla
+  SPICES: Salt, Pepper, Cumin, Paprika powder, Smoked paprika, Cinnamon, Chili flakes, Chili powder, Ras el hanout, Za'atar, Garam masala, Turmeric, Curry powder
+
+  If you need an ingredient not on the list above, use the most common English supermarket name. NEVER add modifiers like "Canned", "Frozen", "Fresh", "Cooked", "Pre-cooked", "Ground" (except where part of a compound name like "Ground beef"), "Raw", "Dried", "Chunks", "Wraps", "Wheat", "Aus der Dose", "Tiefkühl-". NEVER use parens. Write "Chickpeas" — never "Chickpeas (canned)". Write "Mixed berries" — never "Frozen mixed berries".
+
+MANDATORY UNITS — use ONLY the listed unit per ingredient (never any other):
+  · Honey, Olive oil, Sesame oil, Soy sauce, Peanut butter, Almond butter, Lemon juice, Tomato paste, Hummus, Maple syrup, Vinegar, Dijon mustard, Tahini: tbsp (for "1 tsp" recipes, write "0.5 tbsp"; for "2 tsp" write "1 tbsp")
+  · Salt, Pepper, Cumin, Ras el hanout, Za'atar, Paprika powder, Cinnamon, Chili flakes, Baking powder, Vanilla, Curry powder, Turmeric, Garam masala: tsp
+  · Whole grain bread, Whole grain tortilla, Protein bread, Eggs, Banana, Apple, Pear, Avocado: piece (for bread count slices)
+  · Garlic, Ginger: g (1 small clove garlic = 3g, 1 thumb ginger = 10g)
+  · All other produce (Red onion, Spring onions, Tomato, Cherry tomatoes, Cucumber, Bell pepper, Broccoli, Pak choi, Baby spinach, Spinach, Carrot, Zucchini, Mushrooms, Parsley, Chives, etc.): g (use realistic weights — 1 small onion ≈ 60g, 1 spring onion ≈ 15g)
+  · Milk, Egg whites: ml
+  · All meats, dairy (Skyr, Quark, Cottage cheese, Feta, Yogurt), grains (Rice, Bulgur, Oats, Lentils, Chickpeas, Soba noodles), nuts/seeds (Walnuts, Almonds, Pumpkin seeds, Chia seeds), Mixed berries, Whey protein, frozen produce: g
+
+USE ONE consistent unit per ingredient across the entire week. Never mix tbsp/tsp for the same ingredient, never mix g/piece for the same ingredient.
+
+VARIETY WITHIN A 7-DAY WEEK — DON'T BE LAZY:
+- Vary the PRIMARY PROTEIN. Don't use the same protein more than 3 days. Rotate among Chicken / Salmon / Beef / Lamb / Tuna / Tofu / Eggs / Shrimp.
+- Vary the GRAIN/CARB base. Don't use Bulgur (or Rice, or Soba, or Tortilla) more than 3 days. Rotate.
+- Vary the DISH TYPE every day. Don't make 4 "[Protein] Bowl"s in a week. Cycle through: Bowl, Wrap, Soup, Salad, Stir-fry, Sheet-pan roast, Curry, Stew, Tacos, Frittata, Pasta dish, Sandwich, Casserole, Skewers, Burger (lean).
+- Vary the COOKING METHOD: grilled, baked, sheet-pan, stir-fried, no-cook/assembly, braised, stewed, raw/cured, soup.
+- DO NOT relabel the same dish in different regional styles. "Brazilian Chicken Bulgur" and "Peruvian Chicken Bulgur" and "Colombian Chicken Bulgur" all describe the same dish with three country labels — that is NOT variety, it is just relabeling. Real variety changes the PROTEIN or the GRAIN or the TECHNIQUE — not just the country-name prefix.
+
+INGREDIENT COUNTS:
 - 4-8 ingredients per meal; snacks 2-4.
-- Favor weight-loss-friendly high-protein staples: Hähnchenbrust, Rindfleisch, Lachsfilet, weißer Fisch, Eier, Magerquark, Skyr, Hüttenkäse, Linsen, Tofu.
+- Favor weight-loss-friendly high-protein staples: Chicken breast, Beef, Salmon fillet, White fish, Eggs, Quark, Skyr, Cottage cheese, Lentils, Tofu.
 
 PREP-TIME TIERS: "5" = no-cook / assembly only, "15" = ≤15 min, "30" = ≤30 min, "60" = 30+ min.
 - Breakfast: prefer "5" (overnight oats, skyr bowls, cottage cheese plates).
-- Snack: ALWAYS "5". Draw from this rotating pool to keep the grocery list clean: ${SNACK_POOL}.
-
-The "instructions" field must be 1-2 short, action-focused sentences.`;
+- Snack: ALWAYS "5". Draw from this rotating pool to keep the grocery list clean: ${SNACK_POOL_EN}.`;
 
 const MEAL_SCHEMA = {
   type: "object",
@@ -105,10 +129,10 @@ function dayPrompt(day, settings, allowLongCook, existingNames, existingIngredie
     ? 'TIME CONSTRAINT: At most ONE meal may be prep_time "60", and only dinner. Every other meal must be "5", "15", or "30".'
     : 'TIME CONSTRAINT: NO meal may be prep_time "60". Every meal must be "5", "15", or "30".';
   const avoidRepeats = existingNames.length
-    ? `\nDo NOT repeat any of these meals already planned this week: ${existingNames.join(", ")}.`
+    ? `\nMeals already on this week's menu (give today's meals clearly different names AND different core ingredients — not just a different country label): ${existingNames.join(" | ")}.`
     : "";
   const reuseIngredients = existingIngredients.length
-    ? `\nINGREDIENT CONSISTENCY — STRICT: When this day's meals include any of these ingredients already used earlier in the week, you MUST use the EXACT same name AND the EXACT same unit shown here, character-for-character. Do not substitute equivalents, translate, add modifiers, or change unit. Reused ingredients: ${existingIngredients.join(", ")}.`
+    ? `\nINGREDIENT CONSISTENCY: When this day's meals include any of these ingredients already used earlier in the week, use the EXACT same name AND the EXACT same unit shown here. Do not translate, do not add modifiers, do not change unit. Reused ingredients: ${existingIngredients.join(", ")}.`
     : "";
   return `Generate a full-day meal plan for ${day} — four slots: breakfast, lunch, dinner, snack.
 
@@ -205,7 +229,7 @@ export default async function handler(req, res) {
   try {
     const message = await anthropic.messages.create({
       model: MODEL,
-      max_tokens: mode === "day" ? 3000 : 1200,
+      max_tokens: mode === "day" ? 4000 : 1500,
       thinking: { type: "disabled" },
       output_config: {
         format: {
