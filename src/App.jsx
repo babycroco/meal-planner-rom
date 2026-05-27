@@ -60,6 +60,28 @@ const PROGRAMS = [
 ];
 const PROGRAM_BY_ID = Object.fromEntries(PROGRAMS.map((p) => [p.id, p]));
 
+// Cuisine themes — Generate Week picks one at random each click (never the
+// same as the previous week) and threads its cuisine string through as the
+// generation's settings.cuisines override. Keeps the weekly plan varied
+// instead of perpetually Mediterranean/Asian.
+const CUISINE_THEMES = [
+  { id: "mediterranean", emoji: "🫒", name: "Mediterranean", cuisines: "Greek, Spanish coastal, Sicilian, Cypriot" },
+  { id: "levant",        emoji: "🥙", name: "Levantine",     cuisines: "Lebanese, Turkish, Israeli, Persian" },
+  { id: "east_asian",    emoji: "🍜", name: "East Asian",    cuisines: "Chinese (Sichuan/Cantonese), Japanese, Korean" },
+  { id: "thai_sea",      emoji: "🌶️", name: "Thai & SE Asian", cuisines: "Thai, Vietnamese, Indonesian, Malaysian" },
+  { id: "indian",        emoji: "🍛", name: "Indian",        cuisines: "North Indian, South Indian, Sri Lankan, Nepalese" },
+  { id: "mexican",       emoji: "🌮", name: "Mexican",       cuisines: "Mexican, Tex-Mex, Yucatecan, Oaxacan" },
+  { id: "latin",         emoji: "🇦🇷", name: "Latin American", cuisines: "Peruvian, Brazilian, Argentine (lean grilled), Colombian" },
+  { id: "north_african", emoji: "🐪", name: "North African", cuisines: "Moroccan, Tunisian, Egyptian, Algerian" },
+  { id: "german_alpine", emoji: "🥨", name: "German & Alpine", cuisines: "German lean comfort, Austrian, Swiss alpine, Czech" },
+  { id: "nordic",        emoji: "🐟", name: "Nordic",        cuisines: "Danish, Swedish, Finnish, Norwegian (high-protein)" },
+  { id: "french",        emoji: "🥖", name: "French Bistro", cuisines: "French bistro, Provençal, Alsatian (light)" },
+  { id: "italian",       emoji: "🍝", name: "Italian",       cuisines: "Italian Northern + Southern (lean — pesto, agrodolce, cacciatore)" },
+  { id: "ethiopian",     emoji: "🌍", name: "Ethiopian & East African", cuisines: "Ethiopian, Eritrean, Somali (lean stews)" },
+  { id: "fusion",        emoji: "🌎", name: "Globe-trotter", cuisines: "Mixed: pick freely across Asian, Mediterranean, Latin, Middle Eastern" },
+];
+const THEME_BY_ID = Object.fromEntries(CUISINE_THEMES.map((t) => [t.id, t]));
+
 const TIME_LABELS = {
   "5": "≤5 min",
   "15": "≤15 min",
@@ -867,6 +889,7 @@ export default function App() {
   const [settings, setSettings] = useState(() => ({ ...DEFAULT_SETTINGS, ...load("settings_v2", {}) }));
   const [meals, setMeals] = useState(() => load("meals_v2", {}));
   const [activeProgramId, setActiveProgramId] = useState(() => load("activeProgram", "cut"));
+  const [currentTheme, setCurrentTheme] = useState(() => load("currentTheme_v1", null));
   const [pantry, setPantry] = useState(() => consolidatePantry(load("pantry_v1", [])));
   const [pantryDraft, setPantryDraft] = useState(EMPTY_PANTRY_DRAFT);
   const [coachMessages, setCoachMessages] = useState(() => load("coachMessages_v1", []));
@@ -887,6 +910,7 @@ export default function App() {
   useEffect(() => { save("settings_v2", settings); }, [settings]);
   useEffect(() => { save("meals_v2", meals); }, [meals]);
   useEffect(() => { save("activeProgram", activeProgramId); }, [activeProgramId]);
+  useEffect(() => { save("currentTheme_v1", currentTheme); }, [currentTheme]);
   useEffect(() => { save("pantry_v1", pantry); }, [pantry]);
   useEffect(() => { save("coachMessages_v1", coachMessages); }, [coachMessages]);
 
@@ -1015,6 +1039,13 @@ export default function App() {
   const generateWeek = async () => {
     setLoading(true);
     setError(null);
+    // Pick a cuisine theme for this generation. Always different from the
+    // last one (when possible) so two consecutive Generate clicks never
+    // produce the same flavor lane.
+    const eligible = CUISINE_THEMES.filter((t) => t.id !== currentTheme);
+    const pool = eligible.length > 0 ? eligible : CUISINE_THEMES;
+    const theme = pool[Math.floor(Math.random() * pool.length)];
+    const generationSettings = { ...settings, cuisines: theme.cuisines };
     try {
       let longCookRemaining = settings.maxLongCookPerWeek;
       const newMeals = {};
@@ -1027,7 +1058,7 @@ export default function App() {
         const isWeekend = day === "Sat" || day === "Sun";
         const allowLongCook = isWeekend && longCookRemaining > 0;
         const ingredientList = [...usedIngredients.values()];
-        const dayMeals = await generateDay(day, settings, allowLongCook, usedNames, ingredientList);
+        const dayMeals = await generateDay(day, generationSettings, allowLongCook, usedNames, ingredientList);
         SLOTS.forEach((slot, i) => {
           const meal = dayMeals[i];
           newMeals[`${day}-${slot}`] = meal;
@@ -1042,6 +1073,7 @@ export default function App() {
         });
         setMeals({ ...newMeals });
       }
+      setCurrentTheme(theme.id);
     } catch (e) {
       console.error(e);
       setError(e.message);
@@ -1173,11 +1205,17 @@ export default function App() {
               {viewTitle}
             </h1>
             {view === "plan" && (
-              <p className="mt-2 text-base text-slate max-w-[520px]">
+              <p className="mt-2 text-base text-slate max-w-[560px]">
                 {hasMeals
                   ? "Seven days · 28 meals · macro-balanced. Tap any meal for ingredients and method."
-                  : "Set your targets, then generate a week. Plans rebalance to within ±1% of macros."}
+                  : "Set your targets, then generate a week. Each click of Generate picks a new cuisine style — Indian, Mexican, Nordic, etc."}
               </p>
+            )}
+            {view === "plan" && hasMeals && currentTheme && THEME_BY_ID[currentTheme] && (
+              <div className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-tint-lavender text-brand-purple-800 text-[11px] font-semibold tracking-[0.02em]">
+                <span aria-hidden>{THEME_BY_ID[currentTheme].emoji}</span>
+                <span>This week's style: {THEME_BY_ID[currentTheme].name}</span>
+              </div>
             )}
           </header>
 

@@ -119,7 +119,7 @@ ${slotTargetLines(settings)}
 
 ${timeRule}
 
-CUISINES: ${settings.cuisines || "any"}.
+THIS WEEK'S CUISINE FOCUS: ${settings.cuisines || "any"}. This is the dominant flavor profile for the entire week — spices, proteins-prep, sauces, sides should commit to this style. Lean HEAVILY into it; avoid defaulting to Mediterranean or generic Asian unless that IS the theme. A small minority of meals (1-2 per week) can drift if needed for variety, but most should clearly reflect this cuisine.
 AVOID: ${settings.avoid || "nothing"}.${avoidRepeats}${reuseIngredients}
 
 Return exactly 4 meals in the "meals" array, in this slot order: breakfast, lunch, dinner, snack.`;
