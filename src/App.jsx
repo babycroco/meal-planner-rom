@@ -494,16 +494,16 @@ const EMPTY_PANTRY_DRAFT = { item: "", qty: "", unit: "g", section: "Produce" };
 
 function Button({ variant = "primary", className = "", children, ...props }) {
   const base =
-    "inline-flex items-center justify-center gap-2 rounded-md font-medium text-sm leading-tight px-[18px] py-[10px] transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap";
+    "inline-flex items-center justify-center gap-2 rounded-sm font-caps text-[11px] tracking-[0.18em] leading-tight px-[18px] py-[11px] transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap";
   const styles = {
-    primary: "bg-primary text-white hover:bg-primary-pressed",
-    dark: "bg-ink-deep text-white hover:opacity-90",
+    primary: "bg-primary text-[var(--on-primary)] hover:bg-primary-pressed",
+    dark: "bg-ink-deep text-[var(--on-primary)] hover:opacity-90",
     secondary:
       "bg-transparent text-ink border border-hairline-strong hover:bg-surface-soft",
     "secondary-on-dark":
-      "bg-transparent text-white border border-white/30 hover:bg-white/10",
+      "bg-transparent text-[var(--on-dark)] border border-[var(--on-dark-muted)] hover:bg-white/10",
     ghost:
-      "bg-transparent text-ink px-3 py-2 rounded-sm hover:bg-surface-soft",
+      "bg-transparent text-ink px-3 py-2 hover:bg-surface-soft normal-case tracking-normal font-body text-sm",
   };
   return (
     <button className={`${base} ${styles[variant]} ${className}`} {...props}>
@@ -528,7 +528,7 @@ function IconButton({ label, onClick, children, className = "" }) {
 function Eyebrow({ children, className = "" }) {
   return (
     <div
-      className={`text-[11px] font-semibold uppercase tracking-[0.08em] text-stone ${className}`}
+      className={`font-caps text-[10px] tracking-[0.22em] text-stone ${className}`}
     >
       {children}
     </div>
@@ -548,12 +548,12 @@ function MacroStat({ label, value, unit, target }) {
   return (
     <div className="px-5 py-4">
       <Eyebrow>{label}</Eyebrow>
-      <div className="mt-1 text-3xl font-semibold tnum text-ink leading-none">
+      <div className="font-display mt-1 text-[40px] tnum text-ink leading-none">
         {value}
-        {unit && <span className="text-base font-normal text-steel ml-0.5">{unit}</span>}
+        {unit && <span className="text-base font-body italic text-steel ml-1">{unit}</span>}
       </div>
       {target != null && (
-        <div className="mt-1.5 text-xs text-steel tnum">target {target}{unit || ""}</div>
+        <div className="mt-1.5 text-xs italic text-steel tnum">target {target}{unit || ""}</div>
       )}
     </div>
   );
@@ -577,30 +577,30 @@ function MealTile({ slot, meal, isRegen, onClick, onRegen }) {
     <button
       onClick={meal ? onClick : undefined}
       disabled={!meal}
-      className="group relative w-full text-left p-3 rounded-md border border-transparent disabled:cursor-default transition-colors"
+      className="group relative w-full text-left p-3 rounded-sm border border-[rgba(42,24,16,0.08)] disabled:cursor-default transition-colors"
       style={{ background: SLOT_TINTS[slot] }}
     >
-      <div className="flex items-center justify-between gap-2 mb-1.5">
-        <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-charcoal/70">
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <span className="font-caps text-[9px] tracking-[0.24em] text-charcoal/80">
           {SLOT_LABELS[slot]}
         </span>
         {meal?.prep_time && <TimeChip prep={meal.prep_time} />}
       </div>
 
       {isRegen ? (
-        <div className="flex items-center gap-2 text-xs text-charcoal/70 py-1">
+        <div className="flex items-center gap-2 text-xs italic text-charcoal/70 py-1">
           <Loader2 size={12} className="animate-spin" /> Reworking…
         </div>
       ) : meal ? (
         <>
-          <div className="text-[13px] font-medium leading-snug text-charcoal min-h-[2.5em]">
+          <div className="font-display italic text-[16px] leading-tight text-charcoal min-h-[2.4em] tracking-[-0.2px]">
             {meal.name}
           </div>
-          <div className="mt-1.5 flex items-center justify-between text-[11px] font-semibold text-charcoal/80 tnum">
-            <span className="inline-flex items-center gap-1">
-              <Flame size={10} />{meal.kcal} kcal
+          <div className="mt-2 flex items-center justify-between text-[11px] text-charcoal/80 tnum">
+            <span className="inline-flex items-center gap-1 font-display">
+              <Flame size={10} />{meal.kcal}
             </span>
-            <span className="inline-flex items-center gap-1">
+            <span className="inline-flex items-center gap-1 font-display">
               <Beef size={10} />{meal.protein_g}g
             </span>
           </div>
@@ -610,7 +610,7 @@ function MealTile({ slot, meal, isRegen, onClick, onRegen }) {
               tabIndex={0}
               onClick={(e) => { e.stopPropagation(); onRegen(); }}
               onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); onRegen(); } }}
-              className="absolute top-1.5 right-1.5 w-6 h-6 inline-flex items-center justify-center rounded-sm bg-white/60 text-charcoal opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+              className="absolute top-1.5 right-1.5 w-6 h-6 inline-flex items-center justify-center rounded-sm bg-[var(--canvas)]/70 text-charcoal opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
               title="Regenerate this meal"
             >
               <RefreshCw size={11} />
@@ -618,7 +618,7 @@ function MealTile({ slot, meal, isRegen, onClick, onRegen }) {
           )}
         </>
       ) : (
-        <div className="text-xs text-charcoal/40">—</div>
+        <div className="text-xs italic text-charcoal/40">—</div>
       )}
     </button>
   );
@@ -627,22 +627,22 @@ function MealTile({ slot, meal, isRegen, onClick, onRegen }) {
 function DayCard({ dayIndex, day, isToday, kcal, protein, carbs, fat, meals, regenKey, onOpenMeal, onRegen }) {
   return (
     <article
-      className="bg-canvas rounded-lg border border-hairline p-4 flex flex-col gap-3 hover:shadow-s2 transition-shadow fade-in"
+      className="bg-[var(--surface)] rounded-sm border border-hairline-strong/40 p-4 flex flex-col gap-3 hover:shadow-s2 transition-shadow fade-in"
       style={{ animationDelay: `${dayIndex * 45}ms` }}
     >
-      <header className="flex items-baseline justify-between gap-2 pb-2.5 border-b border-hairline-soft">
+      <header className="flex items-baseline justify-between gap-2 pb-2.5 border-b border-hairline">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-lg font-semibold text-ink tracking-[-0.2px]">{day}</span>
+          <span className="font-display italic text-[26px] text-[var(--primary)] tracking-[-0.5px] leading-none">{day}</span>
           {isToday && (
-            <span className="px-2 py-0.5 rounded-full bg-primary text-white text-[10px] font-semibold uppercase tracking-[0.08em] leading-none">
-              Today
+            <span className="font-caps px-1.5 py-[3px] rounded-sm bg-[var(--primary)] text-[var(--on-primary)] text-[8px] tracking-[0.24em] leading-none">
+              Oggi
             </span>
           )}
         </div>
-        <div className="text-right text-[11px] text-steel font-medium leading-tight tnum">
-          <div className="text-ink font-semibold">{kcal.toLocaleString()} kcal</div>
-          <div>{protein}g protein</div>
-          <div className="text-stone">C {carbs} · F {fat}</div>
+        <div className="text-right text-[10px] text-steel leading-tight tnum">
+          <div className="font-display text-ink text-[14px]">{kcal.toLocaleString()}<span className="font-body italic text-steel text-[10px] ml-0.5">kcal</span></div>
+          <div className="font-body italic">{protein}g protein</div>
+          <div className="text-stone font-body italic">C {carbs} · F {fat}</div>
         </div>
       </header>
 
@@ -686,7 +686,7 @@ function Modal({ open, onClose, children, maxWidth = "max-w-lg" }) {
 function ModalHeader({ title, onClose }) {
   return (
     <div className="flex items-center justify-between p-6 pb-4 border-b border-hairline-soft">
-      <h2 className="text-xl font-semibold text-ink tracking-[-0.3px]">{title}</h2>
+      <h2 className="font-display italic text-[28px] text-ink tracking-[-0.5px] leading-none">{title}</h2>
       <IconButton label="Close" onClick={onClose}><X size={18} /></IconButton>
     </div>
   );
@@ -695,7 +695,7 @@ function ModalHeader({ title, onClose }) {
 function SidebarSection({ title, children }) {
   return (
     <div className="mb-4">
-      <div className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-stone">{title}</div>
+      <div className="font-caps px-3 pb-2 text-[9px] tracking-[0.28em] text-[var(--muted)]">{title}</div>
       <div className="space-y-0.5">{children}</div>
     </div>
   );
@@ -705,9 +705,9 @@ function SidebarItem({ icon: Icon, label, active, onClick, dotColor }) {
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium text-left transition-colors ${active ? "bg-surface-soft text-ink" : "text-charcoal hover:bg-surface-soft"}`}
+      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-sm text-[15px] text-left transition-colors ${active ? "bg-[rgba(244,235,211,0.10)] text-[var(--on-dark)]" : "text-[var(--on-dark-muted)] hover:bg-[rgba(244,235,211,0.05)] hover:text-[var(--on-dark)]"}`}
     >
-      {Icon && <Icon size={16} strokeWidth={2} className={active ? "text-ink" : "text-steel"} />}
+      {Icon && <Icon size={15} strokeWidth={1.5} className={active ? "text-[var(--on-dark)]" : "text-[var(--muted)]"} />}
       <span className="flex-1 truncate">{label}</span>
       {dotColor && (
         <span className="w-1.5 h-1.5 rounded-full" style={{ background: dotColor }} />
@@ -731,15 +731,15 @@ function Sidebar({
         />
       )}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-60 bg-surface border-r border-hairline flex flex-col transform transition-transform lg:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
+        className={`wood-grain fixed inset-y-0 left-0 z-40 w-60 border-r border-[rgba(0,0,0,0.45)] flex flex-col transform transition-transform lg:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
       >
-        <div className="h-16 px-5 flex items-center justify-between border-b border-hairline">
-          <a href="/" className="flex items-center gap-2.5 select-none">
-            <span className="w-7 h-7 rounded-sm bg-ink-deep text-white grid place-items-center text-base font-bold leading-none">M</span>
-            <span className="text-[18px] font-semibold tracking-[-0.4px] text-ink">Meals</span>
+        <div className="h-16 px-5 flex items-center justify-between border-b border-[rgba(244,235,211,0.10)]">
+          <a href="/" className="flex items-center gap-3 select-none">
+            <span className="w-9 h-9 rounded-sm bg-[var(--canvas)] text-[var(--primary)] grid place-items-center font-display italic text-[22px] leading-none shadow-s1" style={{ paddingBottom: "2px" }}>M</span>
+            <span className="font-display italic text-[24px] tracking-[-0.5px] text-[var(--on-dark)] leading-none" style={{ paddingTop: "3px" }}>Meals</span>
           </a>
           <button
-            className="lg:hidden text-charcoal p-1 hover:bg-surface-soft rounded-sm"
+            className="lg:hidden text-[var(--on-dark-muted)] p-1 hover:text-[var(--on-dark)] rounded-sm"
             onClick={onCloseSidebar}
             aria-label="Close menu"
           >
@@ -765,15 +765,29 @@ function Sidebar({
           </SidebarSection>
         </div>
 
-        <div className="border-t border-hairline p-3 flex items-center gap-1">
-          <IconButton label="Settings" onClick={onSettings}><SettingsIcon size={18} /></IconButton>
-          <IconButton label="Sync" onClick={onSync}><Share2 size={18} /></IconButton>
+        <div className="border-t border-[rgba(244,235,211,0.10)] p-3 flex items-center gap-1">
+          <button
+            onClick={onSettings}
+            aria-label="Settings"
+            title="Settings"
+            className="w-9 h-9 inline-flex items-center justify-center rounded-sm text-[var(--on-dark-muted)] hover:text-[var(--on-dark)] hover:bg-[rgba(244,235,211,0.06)] transition-colors"
+          >
+            <SettingsIcon size={17} strokeWidth={1.5} />
+          </button>
+          <button
+            onClick={onSync}
+            aria-label="Sync"
+            title="Sync"
+            className="w-9 h-9 inline-flex items-center justify-center rounded-sm text-[var(--on-dark-muted)] hover:text-[var(--on-dark)] hover:bg-[rgba(244,235,211,0.06)] transition-colors"
+          >
+            <Share2 size={17} strokeWidth={1.5} />
+          </button>
           <button
             onClick={onGenerate}
             disabled={loading}
-            className="ml-auto inline-flex items-center justify-center gap-2 rounded-md font-medium text-sm leading-tight px-3 py-2 bg-primary text-white hover:bg-primary-pressed transition-colors disabled:opacity-50"
+            className="font-caps ml-auto inline-flex items-center justify-center gap-2 rounded-sm text-[11px] tracking-[0.18em] px-3.5 py-2 bg-[var(--primary)] text-[var(--on-primary)] hover:bg-[var(--primary-pressed)] transition-colors disabled:opacity-50"
           >
-            {loading ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+            {loading ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
             {hasMeals ? "Regenerate" : "Generate"}
           </button>
         </div>
@@ -1097,9 +1111,9 @@ export default function App() {
           >
             <MenuIcon size={20} />
           </button>
-          <div className="flex items-center gap-2 font-semibold text-ink">
-            <span className="w-6 h-6 rounded-sm bg-ink-deep text-white grid place-items-center text-xs font-bold">M</span>
-            <span>Meals</span>
+          <div className="flex items-center gap-2">
+            <span className="w-7 h-7 rounded-sm bg-[var(--wood-walnut)] text-[var(--canvas)] grid place-items-center font-display italic text-base leading-none" style={{ paddingBottom: "2px" }}>M</span>
+            <span className="font-display italic text-xl tracking-[-0.5px] text-[var(--ink)] leading-none" style={{ paddingTop: "2px" }}>Meals</span>
           </div>
           <button
             onClick={generateWeek}
@@ -1115,7 +1129,7 @@ export default function App() {
           {/* ── Page heading ────────────────────────────────────── */}
           <header className="mb-8">
             <Eyebrow>Week 01 · {activeProgram.name}</Eyebrow>
-            <h1 className="mt-1.5 text-3xl sm:text-4xl lg:text-[44px] font-semibold tracking-[-0.5px] text-ink leading-[1.1]">
+            <h1 className="font-display italic mt-2 text-[42px] sm:text-[56px] lg:text-[68px] font-normal tracking-[-1.5px] text-[var(--primary)] leading-[0.95]">
               {viewTitle}
             </h1>
             {view === "plan" && (

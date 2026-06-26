@@ -2,83 +2,97 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── Meals — Notion-derived design tokens ────────────────────────── */
+/* ── Meals — Tuscan trattoria / 1930s Italian design tokens ─────── */
 :root {
-  /* Brand & primary */
-  --primary: #5046E5;          /* Notion purple — the signature CTA */
-  --primary-pressed: #3B33C2;
-  --primary-deep: #2A23A0;
-  --on-primary: #FFFFFF;
+  /* Brand & primary — deep Tuscan wine */
+  --primary: #722f37;            /* deep wine / Chianti */
+  --primary-pressed: #5a1f27;
+  --primary-deep: #3f0e15;
+  --on-primary: #f4ebd3;         /* cream paper on wine */
 
-  --brand-navy: #1A1B3A;       /* hero band tone */
-  --brand-navy-deep: #0F1029;
-  --brand-navy-mid: #2A2C55;
+  /* Cabin wood tones (dark sidebar, headings, etc.) */
+  --wood-walnut: #2a1810;        /* darkest cabin wood */
+  --wood-walnut-deep: #1a0e08;
+  --wood-saddle: #4a2e1f;        /* mid wood */
+  --wood-oak: #8b5a2b;           /* warm oak accent */
+  --wood-grain: rgba(74, 46, 31, 0.05);
 
+  /* Legacy compatibility — keep the navy tokens pointing at walnut wood */
+  --brand-navy: var(--wood-walnut);
+  --brand-navy-deep: var(--wood-walnut-deep);
+  --brand-navy-mid: var(--wood-saddle);
+
+  /* Inline blue stays for link-blue accent (rare) */
   --link-blue: #2383E2;
   --link-blue-pressed: #1A6FC4;
 
-  /* Brand spectrum (echoes Notion's database property colors) */
-  --brand-pink: #F45D9C;
-  --brand-pink-deep: #C73C7A;
-  --brand-orange: #F58536;
-  --brand-orange-deep: #C8531A;
-  --brand-purple: #6A4FB6;
-  --brand-purple-300: #B8A8E8;
-  --brand-purple-800: #3B2A75;
-  --brand-teal: #2F9E92;
-  --brand-green: #3D8C40;
-  --brand-yellow: #E8B739;
-  --brand-brown: #8C6A4F;
+  /* Brand spectrum — Italian palette */
+  --brand-pink: #c66b7d;         /* faded rose */
+  --brand-pink-deep: #8e3f50;
+  --brand-orange: #c8531a;       /* terracotta */
+  --brand-orange-deep: #8e3a12;
+  --brand-purple: #6b4423;       /* dusty walnut */
+  --brand-purple-300: #b8956a;
+  --brand-purple-800: #4a2e1f;
+  --brand-teal: #4a7780;         /* aged copper */
+  --brand-green: #6b7f3e;        /* Tuscan olive */
+  --brand-yellow: #d4a017;       /* saffron */
+  --brand-brown: #8b5a2b;        /* oak */
 
-  /* Card tints — pastel feature backgrounds */
-  --tint-peach: #FBE6D5;
-  --tint-rose: #FBD4D4;
-  --tint-mint: #D7F0D4;
-  --tint-lavender: #E6E0F5;
-  --tint-sky: #D8E8F5;
-  --tint-yellow: #FBEFC8;
-  --tint-yellow-bold: #FCD34D;
-  --tint-cream: #F8F1E1;
-  --tint-gray: #EFEEEB;
+  /* Card tints — earthy pastels (mapped onto the existing Notion names
+     so per-slot meal tile lookups keep working unchanged) */
+  --tint-lavender: #f0e3c3;      /* OAT cream → breakfast */
+  --tint-peach: #e6b89c;         /* TERRACOTTA → lunch */
+  --tint-mint: #c9d4a7;          /* SAGE → dinner */
+  --tint-yellow: #ecc97a;        /* HONEY / saffron → snack */
+  --tint-rose: #e0b9b9;
+  --tint-sky: #b8c8d1;
+  --tint-yellow-bold: #d4a017;   /* solid saffron */
+  --tint-cream: #f0e3c3;
+  --tint-gray: #d9cdb0;
 
-  /* Surface */
-  --canvas: #FFFFFF;
-  --surface: #FBFAF8;
-  --surface-soft: #F4F2EE;
-  --hairline: #EFEEEB;
-  --hairline-soft: #F4F2EE;
-  --hairline-strong: #E0DDD6;
+  /* Surface — aged paper */
+  --canvas: #f4ebd3;             /* main page bg — cream paper */
+  --surface: #ede0c2;            /* cards — slightly deeper paper */
+  --surface-soft: #e3d4b1;       /* hover / alt sections */
+  --hairline: #c9b189;           /* sepia line */
+  --hairline-soft: #d8c8a8;
+  --hairline-strong: #97785c;    /* stronger sepia border */
 
-  /* Text */
-  --ink-deep: #000000;
-  --ink: #191919;
-  --charcoal: #37352F;         /* signature warm-charcoal */
-  --slate: #5C5A54;
-  --steel: #87867F;
-  --stone: #9B9A93;
-  --muted: #C4C3BD;
-  --on-dark: #FFFFFF;
-  --on-dark-muted: rgba(255, 255, 255, 0.62);
+  /* Text — walnut ink */
+  --ink-deep: #1a0e08;           /* darkest walnut */
+  --ink: #2a1810;                /* walnut ink — body */
+  --charcoal: #4a2e1f;           /* mid walnut */
+  --slate: #5c3d2e;              /* warm brown body */
+  --steel: #7a5a3e;              /* sepia secondary */
+  --stone: #97785c;              /* faded sepia */
+  --muted: #c4a87a;              /* dust */
+  --on-dark: #f4ebd3;            /* cream on dark wood */
+  --on-dark-muted: rgba(244, 235, 211, 0.62);
 
   /* Semantic */
-  --success: #3D8C40;
-  --warning: #E89C2A;
-  --error: #D7373F;
-  --error-tint: #FBE7E5;
+  --success: #6b7f3e;            /* olive */
+  --warning: #d4a017;            /* saffron */
+  --error: #a83232;              /* dried brick */
+  --error-tint: #f0d8d4;
 
-  /* Elevation */
-  --shadow-1: rgba(15, 15, 15, 0.04) 0 1px 2px 0;
-  --shadow-2: rgba(15, 15, 15, 0.08) 0 4px 12px 0;
-  --shadow-3: rgba(15, 15, 15, 0.20) 0 24px 48px -8px;
-  --shadow-4: rgba(15, 15, 15, 0.16) 0 16px 48px -8px;
+  /* Elevation — warmer drop shadows */
+  --shadow-1: rgba(42, 24, 16, 0.06) 0 1px 2px 0;
+  --shadow-2: rgba(42, 24, 16, 0.12) 0 4px 14px 0;
+  --shadow-3: rgba(42, 24, 16, 0.24) 0 24px 48px -8px;
+  --shadow-4: rgba(42, 24, 16, 0.20) 0 16px 48px -8px;
 
-  /* Scrim */
-  --scrim: rgba(15, 15, 15, 0.45);
+  --scrim: rgba(26, 14, 8, 0.62);
 
-  /* Type */
-  --font-sans: "Inter", "Notion Sans", -apple-system, system-ui, "Segoe UI", Helvetica, sans-serif;
+  /* Type system — 1930s Italian: Bodoni for display, Cormorant for body,
+     Cinzel for Roman uppercase eyebrows and labels */
+  --font-display: "Bodoni Moda", "Playfair Display", "Didot", Georgia, serif;
+  --font-body: "Cormorant Garamond", "EB Garamond", Georgia, "Times New Roman", serif;
+  --font-caps: "Cinzel", "Trajan Pro", Georgia, serif;
+  --font-sans: var(--font-body);       /* legacy alias */
 }
 
+/* Aged paper background with subtle noise grain on the whole page */
 html,
 body,
 #root {
@@ -88,26 +102,84 @@ body,
 }
 
 body {
-  font-family: var(--font-sans);
+  font-family: var(--font-body);
   color: var(--ink);
-  font-size: 16px;
+  font-size: 17px;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background-image:
+    url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.16 0 0 0 0 0.08 0 0 0 0 0.04 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-attachment: fixed;
 }
 
-/* Tighter display tracking — Notion's signature negative letter-spacing on
-   large headlines. Applied via .t-display utility on h1/h2 elements. */
+/* Typography utility classes */
 .t-display {
+  font-family: var(--font-display);
   letter-spacing: -0.5px;
 }
 .t-display-tight {
+  font-family: var(--font-display);
   letter-spacing: -1px;
 }
 
-/* Tabular numerals for macro stats — keeps numbers aligned across the grid. */
+/* Force display font on any h1/h2 in the main page heading */
+.font-display {
+  font-family: var(--font-display);
+}
+.font-body {
+  font-family: var(--font-body);
+}
+.font-caps {
+  font-family: var(--font-caps);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
 .tnum {
   font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* Old-style serif numerals for headlines feel more "menu" */
+.osf {
+  font-variant-numeric: oldstyle-nums;
+  font-feature-settings: "onum";
+}
+
+/* Wood-grain decorative pattern for the cabin sidebar — vertical streaks
+   over the walnut bg, very subtle so text stays readable. */
+.wood-grain {
+  background-color: var(--wood-walnut);
+  background-image:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent 9px,
+      rgba(244, 235, 211, 0.018) 9px,
+      rgba(244, 235, 211, 0.018) 10px,
+      transparent 10px,
+      transparent 24px,
+      rgba(0, 0, 0, 0.10) 24px,
+      rgba(0, 0, 0, 0.10) 25px
+    ),
+    url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='w'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.012 0.85' numOctaves='3' seed='2'/%3E%3CfeColorMatrix values='0 0 0 0 0.10 0 0 0 0 0.06 0 0 0 0 0.03 0 0 0 0.65 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23w)'/%3E%3C/svg%3E");
+}
+
+/* Decorative section divider — a thin sepia line with a center diamond. */
+.divider-flourish {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--stone);
+}
+.divider-flourish::before,
+.divider-flourish::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.45;
 }
 
 @keyframes fadeIn {
