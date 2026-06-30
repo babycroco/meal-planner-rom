@@ -32,11 +32,25 @@ async function callApi(endpoint, payload) {
   return data;
 }
 
-// Generate one day's 4 meals (breakfast, lunch, dinner, snack).
-// `existingIngredients` is a list like ["Skyr (g)", "Banane (piece)"] — the
-// LLM is told to reuse these exact names+units when applicable so the
-// grocery list dedups cleanly.
-export async function generateDay(day, settings, allowLongCook, existingNames, existingIngredients = []) {
+// Phase 1 of week generation: the chef designs the whole 7-day menu at once,
+// deliberately varied and anchored to the season. Returns
+// [{ day: "Mon", concept: "..." }, ...]. `ctx` carries month / location /
+// seasonalHint so the planner cooks for the right time of year and place.
+export async function planWeek(settings, ctx = {}) {
+  const { days } = await callApi("/api/generate-meals", {
+    mode: "plan",
+    settings,
+    monthName: ctx.monthName || "",
+    location: ctx.location || "",
+    seasonalHint: ctx.seasonalHint || "",
+  });
+  return days;
+}
+
+// Phase 2: generate one day's 4 meals, guided by that day's concept from the
+// blueprint. `existingIngredients` (e.g. ["Skyr (g)", "Banana (piece)"]) keeps
+// names+units consistent so the grocery list dedups cleanly.
+export async function generateDay(day, settings, allowLongCook, existingNames, existingIngredients = [], ctx = {}) {
   const { meals } = await callApi("/api/generate-meals", {
     mode: "day",
     day,
@@ -44,18 +58,25 @@ export async function generateDay(day, settings, allowLongCook, existingNames, e
     allowLongCook,
     existingNames,
     existingIngredients,
+    concept: ctx.concept || "",
+    monthName: ctx.monthName || "",
+    location: ctx.location || "",
+    seasonalHint: ctx.seasonalHint || "",
   });
   return meals;
 }
 
-// Regenerate a single meal for one slot.
-export async function regenerateMeal(day, slot, settings, existingNames) {
+// Regenerate a single meal for one slot — stays seasonal via ctx.
+export async function regenerateMeal(day, slot, settings, existingNames, ctx = {}) {
   const { meal } = await callApi("/api/generate-meals", {
     mode: "meal",
     day,
     slot,
     settings,
     existingNames,
+    monthName: ctx.monthName || "",
+    location: ctx.location || "",
+    seasonalHint: ctx.seasonalHint || "",
   });
   return meal;
 }

@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 
-// Per-day generation runs one Anthropic call; 30s is ample headroom.
+// Per-call generation runs one Anthropic call; 30s is ample headroom.
 export const config = { maxDuration: 30 };
 
 const MODEL = "claude-sonnet-4-6";
@@ -8,65 +8,70 @@ const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const SLOTS = ["breakfast", "lunch", "dinner", "snack"];
 const SLOT_LABELS = { breakfast: "Breakfast", lunch: "Lunch", dinner: "Dinner", snack: "Snack" };
 
-const SNACK_POOL =
-  "skyr + berries + nuts, cottage cheese + fruit, Greek yogurt + honey + walnuts, " +
-  "protein shake + banana, hard-boiled eggs + cheese, beef jerky + apple, " +
-  "tuna on rice cakes, hummus + vegetables + protein bread";
-
 const SNACK_POOL_EN =
   "Skyr with berries and walnuts, Cottage cheese with fruit, Greek yogurt with honey and walnuts, " +
   "Protein shake with banana, Hard-boiled eggs with cheese, Tuna on protein bread, " +
-  "Hummus with vegetables and protein bread, Cottage cheese with pineapple and pumpkin seeds";
+  "Hummus with vegetables and protein bread, Cottage cheese with seasonal fruit and pumpkin seeds";
 
-const SYSTEM_PROMPT = `You are a meal-planning assistant for one specific user. You generate realistic, high-protein meals built around weight loss and time-constrained cooking.
+// ── System prompt — a "thinking chef" persona, parameterised by the time of
+// year and location so the chef cooks with what is genuinely in season. The
+// whole block is identical across all calls in one week-generation, so it is
+// marked cacheable (cache_control below).
+function buildSystemPrompt({ monthName, location, seasonalHint }) {
+  const seasonLine = seasonalHint
+    ? `IN SEASON RIGHT NOW (favor these — they're at their peak, freshest, cheapest, and best at the market this month): ${seasonalHint}.`
+    : "Cook with whatever is freshest and in season.";
+  return `You are a thoughtful private chef planning a week of meals for one specific person. You cook with the seasons and the local market, and you bring genuine culinary range — as comfortable with a Sichuan stir-fry as a Provençal braise, a Levantine mezze, or a simple Italian plate. You are curious and never phone it in. Repetition bores you; you treat every week as a fresh chance to cook something the eater hasn't had.
 
-USER: 39yo male, 180cm, 79kg, cutting to 75kg. Trains 4x/week (2 cardio, 2 lifting). Has a newborn baby — needs FAST cooking on weekdays. A capable cook, but time-constrained. Shops at Rewe/Edeka in Germany — ingredients should map to common German-supermarket inventory but ALL OUTPUT MUST BE WRITTEN IN ENGLISH.
+WHERE & WHEN:
+- You are cooking in ${location || "Germany"}. Shop at local supermarkets (Rewe / Edeka) and the weekly farmers' market.
+- It is ${monthName || "this time of year"}. Cook food that tastes like right now — a high-summer plate should sing with tomatoes and herbs; a deep-winter plate leans on roots, brassicas, and slow warmth.
+- ${seasonLine}
+- Do NOT force out-of-season produce. If berries or asparagus aren't listed as in season, don't build a meal around them — reach for what IS fresh.
 
-PRIORITIES, in order:
+THE EATER: 39yo male, 180cm, 79kg, cutting to 75kg. Trains 4x/week (2 cardio, 2 lifting). New baby at home — needs FAST weekday cooking. A capable, adventurous cook who is bored by repetition and loves discovering new dishes.
+
+PRIORITIES, in order, for every meal:
 1. Hit the protein target. This is the #1 priority, every single day.
 2. Stay close to the calorie target.
 3. Respect the prep-time constraint given for each meal.
 
-LANGUAGE — ALWAYS WRITE IN ENGLISH (never German, Italian, Spanish, French, Portuguese, or any other language):
-- The "name" field is a concise English meal title. Examples of GOOD names: "Pesto Chicken Wrap with Cherry Tomatoes", "Sicilian Salmon with Tomato Stew", "Korean Beef Bowl", "Spiced Lamb with Bulgur Pilaf", "Sheet-Pan Lemon Chicken with Broccoli". Examples of BAD names you must NEVER produce: "Brasilianisches Hähnchen mit Bulgur", "Hähnchenbrust alla Puttanesca", "Pollo a la Brasa", "Lachsfilet alla Siciliana". Translate any regional / non-English dish name to English ("Picadillo" → "Cuban Spiced Beef Hash"; "Lomo Saltado" → "Peruvian Stir-Fried Beef with Tomatoes").
-- The "instructions" field is 1-2 short English sentences.
-- The "ingredients[].item" field uses ONLY these English canonical names — never the German equivalent, never with parens, never with modifiers:
-  PROTEINS: Chicken breast, Chicken thighs, Turkey breast, Ground turkey, Beef, Ground beef, Lamb mince, Salmon fillet, Cod, White fish, Tuna, Shrimp, Eggs, Egg whites, Tofu, Whey protein
+CULINARY RANGE — this is what makes you a chef, not a template:
+- Across the week, deliberately TRAVEL. One day a Thai-leaning dinner, the next a French bistro plate, the next a Turkish grill, the next a clean Italian. MIX cuisines across the days — never lock the whole week to one country or region.
+- Within a week: don't use the same primary protein more than 3 days (rotate Chicken / Salmon / Beef / Lamb / Tuna / Tofu / Eggs / Shrimp / White fish / Pork). Don't use the same grain/base more than 3 days (rotate Rice / Bulgur / Potato / Soba / Tortilla / Quinoa / Couscous / Bread / Pasta / Lentils). Vary the FORMAT every day (Bowl, Wrap, Soup, Salad, Stir-fry, Sheet-pan roast, Curry, Stew, Tacos, Frittata, Pasta, Sandwich, Traybake, Skewers, lean Burger). Vary the METHOD (grilled, baked, sheet-pan, stir-fried, no-cook, braised, stewed, poached).
+- NEVER relabel the same dish in different regional styles. "Brazilian Chicken Bowl" + "Peruvian Chicken Bowl" + "Colombian Chicken Bowl" is one dish wearing three country labels — that is NOT range, it's laziness. Real range changes the protein, the technique, the sauce, or the format.
+
+LANGUAGE — ALWAYS WRITE IN ENGLISH (never German, Italian, Spanish, French, or any other language):
+- "name": a concise, appetising English meal title. GOOD: "Sheet-Pan Harissa Chicken with Zucchini", "Miso-Glazed Salmon with Soba", "Summer Tomato & White Bean Salad with Tuna". BAD (never produce): "Hähnchenbrust alla Puttanesca", "Pollo a la Brasa", "Lachsfilet alla Siciliana". Translate any regional dish name to English.
+- "instructions": 1-2 short English sentences, action-focused.
+- "ingredients[].item": use ONLY these English canonical names — never a German equivalent, never with parens, never with modifiers:
+  PROTEINS: Chicken breast, Chicken thighs, Turkey breast, Ground turkey, Beef, Ground beef, Pork tenderloin, Lamb mince, Salmon fillet, Cod, White fish, Tuna, Shrimp, Eggs, Egg whites, Tofu, Whey protein
   DAIRY: Skyr, Cottage cheese, Quark, Feta, Mozzarella, Halloumi, Parmesan, Greek yogurt, Natural yogurt, Milk
   GRAINS & CARBS: Oats, Rice, Jasmine rice, Brown rice, Basmati rice, Bulgur, Lentils, Beluga lentils, Chickpeas, White beans, Black beans, Kidney beans, Soba noodles, Rice noodles, Whole grain bread, Whole grain tortilla, Protein bread, Tabbouleh, Couscous, Quinoa, Pasta, Polenta
-  PRODUCE: Banana, Apple, Pear, Mango, Pineapple, Mixed berries, Lemon, Lime, Cucumber, Tomato, Cherry tomatoes, Chopped tomatoes, Bell pepper, Red onion, Onion, Spring onions, Pak choi, Broccoli, Cauliflower, Kale, Zucchini, Eggplant, Baby spinach, Spinach, Carrot, Avocado, Potato, Sweet potato, Mushrooms
-  HERBS/AROMATICS: Garlic, Ginger, Parsley, Cilantro, Basil, Mint, Dill, Rosemary, Thyme, Oregano, Chives, Bay leaves
+  PRODUCE: Banana, Apple, Pear, Mango, Pineapple, Mixed berries, Strawberries, Cherries, Plums, Peaches, Apricots, Grapes, Rhubarb, Lemon, Lime, Cucumber, Tomato, Cherry tomatoes, Chopped tomatoes, Bell pepper, Red onion, Onion, Spring onions, Leek, Pak choi, Broccoli, Cauliflower, Cabbage, Kale, Brussels sprouts, Zucchini, Eggplant, Green beans, Peas, Asparagus, Fennel, Baby spinach, Spinach, Chard, Carrot, Beetroot, Celeriac, Radishes, Kohlrabi, Avocado, Potato, Sweet potato, Pumpkin, Mushrooms, Corn, Lettuce
+  HERBS/AROMATICS: Garlic, Ginger, Parsley, Cilantro, Basil, Mint, Dill, Rosemary, Thyme, Oregano, Sage, Chives, Bay leaves
   FATS/NUTS/SEEDS: Olive oil, Sesame oil, Coconut oil, Walnuts, Almonds, Cashews, Pumpkin seeds, Sunflower seeds, Chia seeds, Flax seeds, Peanut butter, Almond butter, Tahini
-  PANTRY: Soy sauce, Honey, Maple syrup, Dijon mustard, Vinegar, Apple cider vinegar, Balsamic vinegar, Tomato paste, Hummus, Edamame, Lemon juice, Baking powder, Vanilla
-  SPICES: Salt, Pepper, Cumin, Paprika powder, Smoked paprika, Cinnamon, Chili flakes, Chili powder, Ras el hanout, Za'atar, Garam masala, Turmeric, Curry powder
-
-  If you need an ingredient not on the list above, use the most common English supermarket name. NEVER add modifiers like "Canned", "Frozen", "Fresh", "Cooked", "Pre-cooked", "Ground" (except where part of a compound name like "Ground beef"), "Raw", "Dried", "Chunks", "Wraps", "Wheat", "Aus der Dose", "Tiefkühl-". NEVER use parens. Write "Chickpeas" — never "Chickpeas (canned)". Write "Mixed berries" — never "Frozen mixed berries".
+  PANTRY: Soy sauce, Honey, Maple syrup, Dijon mustard, Vinegar, Apple cider vinegar, Balsamic vinegar, Tomato paste, Hummus, Edamame, Lemon juice, Coconut milk, Baking powder, Vanilla
+  SPICES: Salt, Pepper, Cumin, Paprika powder, Smoked paprika, Cinnamon, Chili flakes, Chili powder, Ras el hanout, Za'atar, Garam masala, Turmeric, Curry powder, Harissa
+  If you need an ingredient not listed, use the most common English supermarket name. NEVER add modifiers like "Canned", "Frozen", "Fresh", "Cooked", "Pre-cooked", "Ground" (except in compound names like "Ground beef"), "Raw", "Dried", "Chunks", "Wraps", "Wheat". NEVER use parens. Write "Chickpeas" — never "Chickpeas (canned)".
 
 MANDATORY UNITS — use ONLY the listed unit per ingredient (never any other):
-  · Honey, Olive oil, Sesame oil, Soy sauce, Peanut butter, Almond butter, Lemon juice, Tomato paste, Hummus, Maple syrup, Vinegar, Dijon mustard, Tahini: tbsp (for "1 tsp" recipes, write "0.5 tbsp"; for "2 tsp" write "1 tbsp")
-  · Salt, Pepper, Cumin, Ras el hanout, Za'atar, Paprika powder, Cinnamon, Chili flakes, Baking powder, Vanilla, Curry powder, Turmeric, Garam masala: tsp
-  · Whole grain bread, Whole grain tortilla, Protein bread, Eggs, Banana, Apple, Pear, Avocado: piece (for bread count slices)
+  · Honey, Olive oil, Sesame oil, Coconut oil, Soy sauce, Peanut butter, Almond butter, Lemon juice, Tomato paste, Hummus, Tahini, Maple syrup, Vinegar, Dijon mustard, Harissa: tbsp (for "1 tsp" write "0.5 tbsp"; for "2 tsp" write "1 tbsp")
+  · Salt, Pepper, Cumin, Ras el hanout, Za'atar, Paprika powder, Smoked paprika, Cinnamon, Chili flakes, Chili powder, Baking powder, Vanilla, Curry powder, Turmeric, Garam masala: tsp
+  · Whole grain bread, Whole grain tortilla, Protein bread, Eggs, Banana, Apple, Pear, Avocado: piece (for bread, count slices)
   · Garlic, Ginger: g (1 small clove garlic = 3g, 1 thumb ginger = 10g)
-  · All other produce (Red onion, Spring onions, Tomato, Cherry tomatoes, Cucumber, Bell pepper, Broccoli, Pak choi, Baby spinach, Spinach, Carrot, Zucchini, Mushrooms, Parsley, Chives, etc.): g (use realistic weights — 1 small onion ≈ 60g, 1 spring onion ≈ 15g)
-  · Milk, Egg whites: ml
-  · All meats, dairy (Skyr, Quark, Cottage cheese, Feta, Yogurt), grains (Rice, Bulgur, Oats, Lentils, Chickpeas, Soba noodles), nuts/seeds (Walnuts, Almonds, Pumpkin seeds, Chia seeds), Mixed berries, Whey protein, frozen produce: g
+  · All other produce (Red onion, Spring onions, Tomato, Cucumber, Bell pepper, Zucchini, Green beans, Asparagus, Carrot, Mushrooms, Leek, etc.): g (realistic weights — 1 small onion ≈ 60g, 1 spring onion ≈ 15g)
+  · Milk, Egg whites, Coconut milk: ml
+  · All meats, dairy (Skyr, Quark, Cottage cheese, Feta, Yogurt), grains (Rice, Bulgur, Oats, Lentils, Chickpeas, Soba noodles), nuts/seeds, Mixed berries, Strawberries, Cherries, Whey protein: g
+USE ONE consistent unit per ingredient across the whole week. Never mix tbsp/tsp, never mix g/piece, for the same ingredient.
 
-USE ONE consistent unit per ingredient across the entire week. Never mix tbsp/tsp for the same ingredient, never mix g/piece for the same ingredient.
-
-VARIETY WITHIN A 7-DAY WEEK — DON'T BE LAZY:
-- Vary the PRIMARY PROTEIN. Don't use the same protein more than 3 days. Rotate among Chicken / Salmon / Beef / Lamb / Tuna / Tofu / Eggs / Shrimp.
-- Vary the GRAIN/CARB base. Don't use Bulgur (or Rice, or Soba, or Tortilla) more than 3 days. Rotate.
-- Vary the DISH TYPE every day. Don't make 4 "[Protein] Bowl"s in a week. Cycle through: Bowl, Wrap, Soup, Salad, Stir-fry, Sheet-pan roast, Curry, Stew, Tacos, Frittata, Pasta dish, Sandwich, Casserole, Skewers, Burger (lean).
-- Vary the COOKING METHOD: grilled, baked, sheet-pan, stir-fried, no-cook/assembly, braised, stewed, raw/cured, soup.
-- DO NOT relabel the same dish in different regional styles. "Brazilian Chicken Bulgur" and "Peruvian Chicken Bulgur" and "Colombian Chicken Bulgur" all describe the same dish with three country labels — that is NOT variety, it is just relabeling. Real variety changes the PROTEIN or the GRAIN or the TECHNIQUE — not just the country-name prefix.
-
-INGREDIENT COUNTS:
-- 4-8 ingredients per meal; snacks 2-4.
-- Favor weight-loss-friendly high-protein staples: Chicken breast, Beef, Salmon fillet, White fish, Eggs, Quark, Skyr, Cottage cheese, Lentils, Tofu.
+INGREDIENT COUNTS: 4-8 ingredients per meal; snacks 2-4.
+Favor weight-loss-friendly high-protein staples for the protein backbone: Chicken breast, Beef, Salmon fillet, White fish, Eggs, Quark, Skyr, Cottage cheese, Lentils, Tofu.
 
 PREP-TIME TIERS: "5" = no-cook / assembly only, "15" = ≤15 min, "30" = ≤30 min, "60" = 30+ min.
-- Breakfast: prefer "5" (overnight oats, skyr bowls, cottage cheese plates).
-- Snack: ALWAYS "5". Draw from this rotating pool to keep the grocery list clean: ${SNACK_POOL_EN}.`;
+- Breakfast: prefer "5" (overnight oats, skyr/quark bowls with seasonal fruit, cottage cheese plates).
+- Snack: ALWAYS "5". Draw from this rotating pool, swapping in seasonal fruit: ${SNACK_POOL_EN}.`;
+}
 
 const MEAL_SCHEMA = {
   type: "object",
@@ -107,6 +112,26 @@ const DAY_SCHEMA = {
   required: ["meals"],
 };
 
+const PLAN_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    days: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          day: { type: "string", enum: DAYS },
+          concept: { type: "string" },
+        },
+        required: ["day", "concept"],
+      },
+    },
+  },
+  required: ["days"],
+};
+
 function slotTargets(settings, slot) {
   const pct = settings[`${slot}Pct`] || 0;
   return {
@@ -124,29 +149,47 @@ function slotTargetLines(settings) {
   }).join("\n");
 }
 
-function dayPrompt(day, settings, allowLongCook, existingNames, existingIngredients = []) {
+// ── Mode: "plan" — the chef designs the whole week at once, deliberately
+// varied and seasonal, before any day is cooked.
+function planPrompt(settings) {
+  const prefs = settings.cuisines
+    ? `\nThe eater especially enjoys these cuisines — weight toward them across the week, but don't be bound to them: ${settings.cuisines}.`
+    : "";
+  const avoid = settings.avoid ? `\nAVOID entirely (allergies / dislikes): ${settings.avoid}.` : "";
+  return `Design a varied, seasonal 7-day menu blueprint (Mon → Sun) for this eater.
+
+For EACH of the 7 days, write a short 1-2 sentence culinary "concept" for that day's LUNCH and DINNER — name the inspiration / cuisine lean, the hero seasonal ingredient, and the technique. Think like a chef sketching a week's menu on a chalkboard.
+
+Across the week, deliberately VARY: cuisine (travel the world — don't repeat a country two days running), primary protein (max 3 days each), technique, and format. Anchor every day to what's in season this month. No two days should feel alike.
+
+Breakfast and snack stay fast and high-protein (skyr / quark / oats / eggs / cottage cheese with seasonal fruit) — you don't need to detail those here, the day-cook will handle them.${prefs}${avoid}
+
+Return exactly 7 entries in "days", one per day Mon..Sun, each with a "concept".`;
+}
+
+function dayPrompt(day, settings, allowLongCook, existingNames, existingIngredients = [], concept = "") {
   const timeRule = allowLongCook
     ? 'TIME CONSTRAINT: At most ONE meal may be prep_time "60", and only dinner. Every other meal must be "5", "15", or "30".'
     : 'TIME CONSTRAINT: NO meal may be prep_time "60". Every meal must be "5", "15", or "30".';
+  const conceptLine = concept
+    ? `\nTODAY'S CONCEPT (from the week's menu plan — build LUNCH and DINNER around this; keep breakfast and snack fast and high-protein): ${concept}`
+    : "";
   const avoidRepeats = existingNames.length
-    ? `\nMeals already on this week's menu (give today's meals clearly different names AND different core ingredients — not just a different country label): ${existingNames.join(" | ")}.`
+    ? `\nAlready on this week's menu (make today clearly different — different dishes, proteins, and formats, not just a renamed version): ${existingNames.join(" | ")}.`
     : "";
   const reuseIngredients = existingIngredients.length
-    ? `\nINGREDIENT CONSISTENCY: When this day's meals include any of these ingredients already used earlier in the week, use the EXACT same name AND the EXACT same unit shown here. Do not translate, do not add modifiers, do not change unit. Reused ingredients: ${existingIngredients.join(", ")}.`
+    ? `\nINGREDIENT CONSISTENCY: when today's meals reuse any of these ingredients, use the EXACT same name AND unit shown here (don't translate, don't add modifiers, don't change unit): ${existingIngredients.join(", ")}.`
     : "";
-  return `Generate a full-day meal plan for ${day} — four slots: breakfast, lunch, dinner, snack.
+  return `Cook a full day for ${day} — four slots: breakfast, lunch, dinner, snack.
 
-DAILY TARGETS: ${settings.kcalTarget} kcal, ${settings.proteinTarget}g protein, ${settings.carbsTarget}g carbs, ${settings.fatTarget}g fat. Protein is the #1 priority — hit the protein target.
+DAILY TARGETS: ${settings.kcalTarget} kcal, ${settings.proteinTarget}g protein, ${settings.carbsTarget}g carbs, ${settings.fatTarget}g fat. Protein is the #1 priority.
 
 PER-SLOT TARGETS:
 ${slotTargetLines(settings)}
 
-${timeRule}
+${timeRule}${conceptLine}${avoidRepeats}${reuseIngredients}
 
-THIS WEEK'S CUISINE FOCUS: ${settings.cuisines || "any"}. This is the dominant flavor profile for the entire week — spices, proteins-prep, sauces, sides should commit to this style. Lean HEAVILY into it; avoid defaulting to Mediterranean or generic Asian unless that IS the theme. A small minority of meals (1-2 per week) can drift if needed for variety, but most should clearly reflect this cuisine.
-AVOID: ${settings.avoid || "nothing"}.${avoidRepeats}${reuseIngredients}
-
-Return exactly 4 meals in the "meals" array, in this slot order: breakfast, lunch, dinner, snack.`;
+Return exactly 4 meals in "meals", in slot order: breakfast, lunch, dinner, snack.`;
 }
 
 function mealPrompt(day, slot, settings, existingNames) {
@@ -159,16 +202,13 @@ function mealPrompt(day, slot, settings, existingNames) {
         ? 'Prep time: prefer "30" or shorter; "60" is allowed if the meal is worth it.'
         : 'Prep time MUST be "5", "15", or "30" — this is a weekday, no time to cook.';
   const avoidRepeats = existingNames.length
-    ? `\nDo NOT repeat any of these: ${existingNames.join(", ")}.`
+    ? `\nMake it clearly different from these (already on the menu): ${existingNames.join(", ")}.`
     : "";
-  return `Generate ONE ${slot} for ${day}.
+  return `Cook ONE ${slot} for ${day} — something fresh and in season, inspired but realistic.
 
 TARGET: ~${t.kcal} kcal, ~${t.protein}g protein, ~${t.carbs}g carbs, ~${t.fat}g fat. Protein is the priority. Do not exceed ${t.kcal} kcal.
 
-${timeRule}
-
-CUISINES: ${settings.cuisines || "any"}.
-AVOID: ${settings.avoid || "nothing"}.${avoidRepeats}`;
+${timeRule}${avoidRepeats}`;
 }
 
 function validSettings(s) {
@@ -205,16 +245,28 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Request body is not valid JSON." });
     }
   }
-  const { mode, day, slot, settings, allowLongCook = false, existingNames = [], existingIngredients = [] } = body || {};
+  const {
+    mode,
+    day,
+    slot,
+    settings,
+    allowLongCook = false,
+    existingNames = [],
+    existingIngredients = [],
+    concept = "",
+    monthName = "",
+    location = "",
+    seasonalHint = "",
+  } = body || {};
 
-  if (mode !== "day" && mode !== "meal") {
-    return res.status(400).json({ error: "'mode' must be 'day' or 'meal'." });
-  }
-  if (!DAYS.includes(day)) {
-    return res.status(400).json({ error: "'day' must be one of Mon-Sun." });
+  if (mode !== "day" && mode !== "meal" && mode !== "plan") {
+    return res.status(400).json({ error: "'mode' must be 'plan', 'day', or 'meal'." });
   }
   if (!validSettings(settings)) {
     return res.status(400).json({ error: "'settings' must include numeric macro targets." });
+  }
+  if (mode !== "plan" && !DAYS.includes(day)) {
+    return res.status(400).json({ error: "'day' must be one of Mon-Sun." });
   }
   if (mode === "meal" && !SLOTS.includes(slot)) {
     return res.status(400).json({ error: "'slot' must be breakfast, lunch, dinner, or snack." });
@@ -226,27 +278,27 @@ export default async function handler(req, res) {
 
   const anthropic = new Anthropic({ apiKey });
 
+  const systemText = buildSystemPrompt({ monthName, location, seasonalHint });
+  const schema = mode === "plan" ? PLAN_SCHEMA : mode === "day" ? DAY_SCHEMA : MEAL_SCHEMA;
+  const userContent =
+    mode === "plan"
+      ? planPrompt(settings)
+      : mode === "day"
+        ? dayPrompt(day, settings, allowLongCook, names, ingredients, concept)
+        : mealPrompt(day, slot, settings, names);
+
   try {
     const message = await anthropic.messages.create({
       model: MODEL,
-      max_tokens: mode === "day" ? 4000 : 1500,
+      max_tokens: mode === "day" ? 4000 : mode === "plan" ? 1500 : 1500,
       thinking: { type: "disabled" },
       output_config: {
-        format: {
-          type: "json_schema",
-          schema: mode === "day" ? DAY_SCHEMA : MEAL_SCHEMA,
-        },
+        format: { type: "json_schema", schema },
       },
-      system: SYSTEM_PROMPT,
-      messages: [
-        {
-          role: "user",
-          content:
-            mode === "day"
-              ? dayPrompt(day, settings, allowLongCook, names, ingredients)
-              : mealPrompt(day, slot, settings, names),
-        },
-      ],
+      // System block is identical across all 8 calls of one week-generation —
+      // cache it so calls 2..8 read the cached prefix instead of re-billing it.
+      system: [{ type: "text", text: systemText, cache_control: { type: "ephemeral" } }],
+      messages: [{ role: "user", content: userContent }],
     });
 
     if (message.stop_reason === "refusal") {
@@ -268,6 +320,12 @@ export default async function handler(req, res) {
       return res.status(502).json({ error: "The model returned malformed data. Try again." });
     }
 
+    if (mode === "plan") {
+      if (!Array.isArray(data.days) || data.days.length === 0) {
+        return res.status(502).json({ error: "The planner returned no menu. Try again." });
+      }
+      return res.status(200).json({ days: data.days });
+    }
     if (mode === "day") {
       if (!Array.isArray(data.meals) || data.meals.length !== 4) {
         return res.status(502).json({

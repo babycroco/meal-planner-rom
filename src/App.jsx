@@ -23,7 +23,7 @@ import {
   Send,
 } from "lucide-react";
 import { load, save } from "./lib/storage";
-import { generateDay, regenerateMeal as apiRegenerateMeal, coachMessage as apiCoachMessage } from "./lib/api";
+import { planWeek as apiPlanWeek, generateDay, regenerateMeal as apiRegenerateMeal, coachMessage as apiCoachMessage } from "./lib/api";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const SLOTS = ["breakfast", "lunch", "dinner", "snack"];
@@ -45,8 +45,9 @@ const DEFAULT_SETTINGS = {
   dinnerPct: 30,
   snackPct: 15,
   maxLongCookPerWeek: 2,
-  cuisines: "Mediterranean, Middle Eastern, Asian",
+  cuisines: "", // optional soft preference now — the chef mixes cuisines freely across the week
   avoid: "",
+  location: "Berlin, Germany",
 };
 
 // Macro presets the user can switch between via the sidebar. Switching a
@@ -60,27 +61,56 @@ const PROGRAMS = [
 ];
 const PROGRAM_BY_ID = Object.fromEntries(PROGRAMS.map((p) => [p.id, p]));
 
-// Cuisine themes — Generate Week picks one at random each click (never the
-// same as the previous week) and threads its cuisine string through as the
-// generation's settings.cuisines override. Keeps the weekly plan varied
-// instead of perpetually Mediterranean/Asian.
-const CUISINE_THEMES = [
-  { id: "mediterranean", emoji: "🫒", name: "Mediterranean", cuisines: "Greek, Spanish coastal, Sicilian, Cypriot" },
-  { id: "levant",        emoji: "🥙", name: "Levantine",     cuisines: "Lebanese, Turkish, Israeli, Persian" },
-  { id: "east_asian",    emoji: "🍜", name: "East Asian",    cuisines: "Chinese (Sichuan/Cantonese), Japanese, Korean" },
-  { id: "thai_sea",      emoji: "🌶️", name: "Thai & SE Asian", cuisines: "Thai, Vietnamese, Indonesian, Malaysian" },
-  { id: "indian",        emoji: "🍛", name: "Indian",        cuisines: "North Indian, South Indian, Sri Lankan, Nepalese" },
-  { id: "mexican",       emoji: "🌮", name: "Mexican",       cuisines: "Mexican, Tex-Mex, Yucatecan, Oaxacan" },
-  { id: "latin",         emoji: "🇦🇷", name: "Latin American", cuisines: "Peruvian, Brazilian, Argentine (lean grilled), Colombian" },
-  { id: "north_african", emoji: "🐪", name: "North African", cuisines: "Moroccan, Tunisian, Egyptian, Algerian" },
-  { id: "german_alpine", emoji: "🥨", name: "German & Alpine", cuisines: "German lean comfort, Austrian, Swiss alpine, Czech" },
-  { id: "nordic",        emoji: "🐟", name: "Nordic",        cuisines: "Danish, Swedish, Finnish, Norwegian (high-protein)" },
-  { id: "french",        emoji: "🥖", name: "French Bistro", cuisines: "French bistro, Provençal, Alsatian (light)" },
-  { id: "italian",       emoji: "🍝", name: "Italian",       cuisines: "Italian Northern + Southern (lean — pesto, agrodolce, cacciatore)" },
-  { id: "ethiopian",     emoji: "🌍", name: "Ethiopian & East African", cuisines: "Ethiopian, Eritrean, Somali (lean stews)" },
-  { id: "fusion",        emoji: "🌎", name: "Globe-trotter", cuisines: "Mixed: pick freely across Asian, Mediterranean, Latin, Middle Eastern" },
+// Seasonal produce by month for Central Europe (Germany) — what's genuinely
+// fresh, local, and at its peak at the market. The chef is told to cook with
+// these so a late-June week tastes like late June, not like January. Index 0
+// = January. The first ~6 entries of each month are the "headline" produce
+// surfaced in the UI chip; the full list is sent to the chef.
+const SEASONAL_PRODUCE = [
+  // Jan
+  ["Kale", "Leek", "Cabbage", "Brussels sprouts", "Celeriac", "Beetroot", "Carrot", "Mushrooms", "Apple", "Pear"],
+  // Feb
+  ["Kale", "Leek", "Cabbage", "Celeriac", "Beetroot", "Carrot", "Mushrooms", "Lettuce", "Apple", "Pear"],
+  // Mar
+  ["Leek", "Spinach", "Chard", "Radishes", "Spring onions", "Lettuce", "Carrot", "Mushrooms", "Apple"],
+  // Apr
+  ["Asparagus", "Radishes", "Spinach", "Spring onions", "Rhubarb", "Lettuce", "Chard", "Mushrooms"],
+  // May
+  ["Asparagus", "Strawberries", "Radishes", "Spinach", "Peas", "Rhubarb", "Kohlrabi", "Spring onions", "Lettuce"],
+  // Jun
+  ["Strawberries", "Zucchini", "Peas", "Green beans", "Cherries", "New potatoes", "Kohlrabi", "Fennel", "Cucumber", "Lettuce"],
+  // Jul
+  ["Tomato", "Zucchini", "Cucumber", "Green beans", "Cherries", "Mixed berries", "Apricots", "Bell pepper", "Fennel", "Corn"],
+  // Aug
+  ["Tomato", "Zucchini", "Bell pepper", "Eggplant", "Cucumber", "Green beans", "Corn", "Plums", "Peaches", "Broccoli"],
+  // Sep
+  ["Tomato", "Bell pepper", "Pumpkin", "Zucchini", "Leek", "Fennel", "Plums", "Apple", "Grapes", "Broccoli", "Cauliflower"],
+  // Oct
+  ["Pumpkin", "Mushrooms", "Leek", "Kale", "Cabbage", "Beetroot", "Carrot", "Celeriac", "Apple", "Pear", "Cauliflower"],
+  // Nov
+  ["Pumpkin", "Kale", "Cabbage", "Brussels sprouts", "Leek", "Celeriac", "Beetroot", "Carrot", "Mushrooms", "Apple"],
+  // Dec
+  ["Kale", "Brussels sprouts", "Cabbage", "Leek", "Celeriac", "Beetroot", "Carrot", "Mushrooms", "Apple", "Pear"],
 ];
-const THEME_BY_ID = Object.fromEntries(CUISINE_THEMES.map((t) => [t.id, t]));
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+// Build the seasonal context for "now": a friendly month label (e.g.
+// "early July"), the full in-season produce list for the chef, and a short
+// headline list for the UI chip.
+function buildSeasonContext(date = new Date()) {
+  const m = date.getMonth();
+  const dom = date.getDate();
+  const part = dom <= 10 ? "early" : dom <= 20 ? "mid" : "late";
+  const produce = SEASONAL_PRODUCE[m];
+  return {
+    monthName: `${part} ${MONTH_NAMES[m]}`,
+    seasonalHint: produce.join(", "),
+    headline: produce.slice(0, 5),
+  };
+}
 
 const TIME_LABELS = {
   "5": "≤5 min",
@@ -267,8 +297,38 @@ const INGREDIENT_ALIAS = {
   "curry powder": "Curry powder", "currypulver": "Curry powder",
   "oregano dried": "Oregano",
   "bay leaves": "Bay leaves", "lorbeerblätter": "Bay leaves",
+  "sage": "Sage", "salbei": "Sage",
   "baking powder": "Baking powder", "backpulver": "Baking powder",
   "vanilla": "Vanilla", "vanille": "Vanilla",
+  "harissa": "Harissa",
+  "coconut milk": "Coconut milk", "kokosmilch": "Coconut milk",
+
+  // Seasonal produce (Central Europe) — keep cart clean as the chef cooks
+  // with what's fresh each month
+  "asparagus": "Asparagus", "spargel": "Asparagus",
+  "strawberries": "Strawberries", "strawberry": "Strawberries", "erdbeeren": "Strawberries",
+  "cherries": "Cherries", "cherry": "Cherries", "kirschen": "Cherries",
+  "plums": "Plums", "plum": "Plums", "pflaumen": "Plums", "zwetschgen": "Plums",
+  "peaches": "Peaches", "peach": "Peaches", "pfirsiche": "Peaches",
+  "apricots": "Apricots", "apricot": "Apricots", "aprikosen": "Apricots",
+  "grapes": "Grapes", "trauben": "Grapes", "weintrauben": "Grapes",
+  "rhubarb": "Rhubarb", "rhabarber": "Rhubarb",
+  "green beans": "Green beans", "grüne bohnen": "Green beans", "string beans": "Green beans",
+  "peas": "Peas", "erbsen": "Peas", "garden peas": "Peas",
+  "leek": "Leek", "leeks": "Leek", "lauch": "Leek", "porree": "Leek",
+  "cabbage": "Cabbage", "weißkohl": "Cabbage", "kohl": "Cabbage",
+  "brussels sprouts": "Brussels sprouts", "rosenkohl": "Brussels sprouts",
+  "fennel": "Fennel", "fenchel": "Fennel",
+  "chard": "Chard", "mangold": "Chard", "swiss chard": "Chard",
+  "beetroot": "Beetroot", "beets": "Beetroot", "rote bete": "Beetroot", "rote beete": "Beetroot",
+  "celeriac": "Celeriac", "sellerie": "Celeriac", "celery root": "Celeriac",
+  "radishes": "Radishes", "radish": "Radishes", "radieschen": "Radishes",
+  "kohlrabi": "Kohlrabi",
+  "pumpkin": "Pumpkin", "squash": "Pumpkin", "butternut squash": "Pumpkin", "kürbis": "Pumpkin",
+  "corn": "Corn", "sweetcorn": "Corn", "mais": "Corn",
+  "new potatoes": "New potatoes", "neue kartoffeln": "New potatoes",
+  "lettuce": "Lettuce", "salat": "Lettuce", "green salad": "Lettuce", "mixed leaves": "Lettuce",
+  "pork tenderloin": "Pork tenderloin", "schweinefilet": "Pork tenderloin", "pork": "Pork tenderloin", "schweinelende": "Pork tenderloin",
 };
 
 // Unit-family map for same-family auto-conversion. Cross-family dupes
@@ -803,7 +863,8 @@ export default function App() {
   const [settings, setSettings] = useState(() => ({ ...DEFAULT_SETTINGS, ...load("settings_v2", {}) }));
   const [meals, setMeals] = useState(() => load("meals_v2", {}));
   const [activeProgramId, setActiveProgramId] = useState(() => load("activeProgram", "cut"));
-  const [currentTheme, setCurrentTheme] = useState(() => load("currentTheme_v1", null));
+  // Snapshot of the season the current week was cooked for — drives the chip.
+  const [weekContext, setWeekContext] = useState(() => load("weekContext_v1", null));
   const [pantry, setPantry] = useState(() => consolidatePantry(load("pantry_v1", [])));
   const [pantryDraft, setPantryDraft] = useState(EMPTY_PANTRY_DRAFT);
   const [coachMessages, setCoachMessages] = useState(() => load("coachMessages_v1", []));
@@ -824,7 +885,7 @@ export default function App() {
   useEffect(() => { save("settings_v2", settings); }, [settings]);
   useEffect(() => { save("meals_v2", meals); }, [meals]);
   useEffect(() => { save("activeProgram", activeProgramId); }, [activeProgramId]);
-  useEffect(() => { save("currentTheme_v1", currentTheme); }, [currentTheme]);
+  useEffect(() => { save("weekContext_v1", weekContext); }, [weekContext]);
   useEffect(() => { save("pantry_v1", pantry); }, [pantry]);
   useEffect(() => { save("coachMessages_v1", coachMessages); }, [coachMessages]);
 
@@ -953,26 +1014,44 @@ export default function App() {
   const generateWeek = async () => {
     setLoading(true);
     setError(null);
-    // Pick a cuisine theme for this generation. Always different from the
-    // last one (when possible) so two consecutive Generate clicks never
-    // produce the same flavor lane.
-    const eligible = CUISINE_THEMES.filter((t) => t.id !== currentTheme);
-    const pool = eligible.length > 0 ? eligible : CUISINE_THEMES;
-    const theme = pool[Math.floor(Math.random() * pool.length)];
-    const generationSettings = { ...settings, cuisines: theme.cuisines };
+    // Anchor the whole generation to the current season + location so the chef
+    // cooks for the right time of year and market.
+    const season = buildSeasonContext();
+    const ctx = {
+      monthName: season.monthName,
+      location: settings.location || "Germany",
+      seasonalHint: season.seasonalHint,
+    };
     try {
+      // Phase 1 — the chef sketches the whole week's menu at once: a varied,
+      // seasonal blueprint with one culinary concept per day. Best-effort;
+      // if it fails we fall back to per-day generation without concepts.
+      let conceptByDay = {};
+      try {
+        const blueprint = await apiPlanWeek(settings, ctx);
+        if (Array.isArray(blueprint)) {
+          for (const d of blueprint) {
+            if (d?.day && d?.concept) conceptByDay[d.day] = d.concept;
+          }
+        }
+      } catch (planErr) {
+        console.warn("Week planning failed, generating without concepts:", planErr);
+      }
+
+      // Phase 2 — cook each day to fulfil its concept, day by day, keeping
+      // ingredient names/units consistent across the week for a clean cart.
       let longCookRemaining = settings.maxLongCookPerWeek;
       const newMeals = {};
       const usedNames = [];
-      // Track every ingredient name + the unit it was used with so the LLM
-      // stays consistent across the week (avoids "Honig" tbsp on Mon, tsp on
-      // Tue, or "Banana" Mon vs "Banane" Tue).
-      const usedIngredients = new Map(); // canonical lowercase → "{Item} ({unit})"
+      const usedIngredients = new Map(); // canonical lowercase|unit → "{Item} ({unit})"
       for (const day of DAYS) {
         const isWeekend = day === "Sat" || day === "Sun";
         const allowLongCook = isWeekend && longCookRemaining > 0;
         const ingredientList = [...usedIngredients.values()];
-        const dayMeals = await generateDay(day, generationSettings, allowLongCook, usedNames, ingredientList);
+        const dayMeals = await generateDay(day, settings, allowLongCook, usedNames, ingredientList, {
+          ...ctx,
+          concept: conceptByDay[day] || "",
+        });
         SLOTS.forEach((slot, i) => {
           const meal = dayMeals[i];
           newMeals[`${day}-${slot}`] = meal;
@@ -987,7 +1066,11 @@ export default function App() {
         });
         setMeals({ ...newMeals });
       }
-      setCurrentTheme(theme.id);
+      setWeekContext({
+        monthName: season.monthName,
+        location: settings.location || "Germany",
+        headline: season.headline,
+      });
     } catch (e) {
       console.error(e);
       setError(e.message);
@@ -1004,7 +1087,12 @@ export default function App() {
         .filter(([k]) => k !== key)
         .map(([, m]) => m?.name)
         .filter(Boolean);
-      const meal = await apiRegenerateMeal(day, slot, settings, others);
+      const season = buildSeasonContext();
+      const meal = await apiRegenerateMeal(day, slot, settings, others, {
+        monthName: season.monthName,
+        location: settings.location || "Germany",
+        seasonalHint: season.seasonalHint,
+      });
       setMeals((prev) => ({ ...prev, [key]: meal }));
     } catch (e) {
       console.error(e);
@@ -1122,13 +1210,15 @@ export default function App() {
               <p className="mt-2 text-base text-slate max-w-[560px]">
                 {hasMeals
                   ? "Seven days · 28 meals · macro-balanced. Tap any meal for ingredients and method."
-                  : "Set your targets, then generate a week. Each click of Generate picks a new cuisine style — Indian, Mexican, Nordic, etc."}
+                  : "Set your targets, then generate a week. The chef cooks with the season and your local market — a different, varied menu every time."}
               </p>
             )}
-            {view === "plan" && hasMeals && currentTheme && THEME_BY_ID[currentTheme] && (
-              <div className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-tint-lavender text-brand-purple-800 text-[11px] font-semibold tracking-[0.02em]">
-                <span aria-hidden>{THEME_BY_ID[currentTheme].emoji}</span>
-                <span>This week's style: {THEME_BY_ID[currentTheme].name}</span>
+            {view === "plan" && hasMeals && weekContext?.headline?.length > 0 && (
+              <div className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-tint-mint text-brand-green text-[11px] font-semibold tracking-[0.02em]">
+                <span aria-hidden>🌿</span>
+                <span>
+                  {weekContext.monthName} · in season: {weekContext.headline.slice(0, 4).join(", ")}
+                </span>
               </div>
             )}
           </header>
@@ -1700,13 +1790,28 @@ export default function App() {
 
           <div>
             <label className="block">
-              <Eyebrow className="!text-charcoal mb-2">Cuisines</Eyebrow>
+              <Eyebrow className="!text-charcoal mb-2">Location</Eyebrow>
+              <Input
+                type="text"
+                value={settings.location}
+                onChange={(e) => setSettings((p) => ({ ...p, location: e.target.value }))}
+                placeholder="e.g. Berlin, Germany"
+              />
+            </label>
+            <div className="mt-1 text-[11px] text-stone">The chef cooks for your local market and the current season.</div>
+          </div>
+
+          <div>
+            <label className="block">
+              <Eyebrow className="!text-charcoal mb-2">Favorite cuisines <span className="text-stone normal-case font-normal tracking-normal">— optional</span></Eyebrow>
               <Input
                 type="text"
                 value={settings.cuisines}
                 onChange={(e) => setSettings((p) => ({ ...p, cuisines: e.target.value }))}
+                placeholder="e.g. Thai, Levantine — leave blank to roam freely"
               />
             </label>
+            <div className="mt-1 text-[11px] text-stone">The chef mixes cuisines across the week. Names here just nudge the leaning.</div>
           </div>
 
           <div>
