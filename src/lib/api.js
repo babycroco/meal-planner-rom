@@ -59,6 +59,8 @@ export async function generateDay(day, settings, allowLongCook, existingNames, e
     existingNames,
     existingIngredients,
     concept: ctx.concept || "",
+    breakfastIdea: ctx.breakfastIdea || "",
+    snackIdea: ctx.snackIdea || "",
     monthName: ctx.monthName || "",
     location: ctx.location || "",
     seasonalHint: ctx.seasonalHint || "",

@@ -8,10 +8,84 @@ const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const SLOTS = ["breakfast", "lunch", "dinner", "snack"];
 const SLOT_LABELS = { breakfast: "Breakfast", lunch: "Lunch", dinner: "Dinner", snack: "Snack" };
 
-const SNACK_POOL_EN =
-  "Skyr with berries and walnuts, Cottage cheese with fruit, Greek yogurt with honey and walnuts, " +
-  "Protein shake with banana, Hard-boiled eggs with cheese, Tuna on protein bread, " +
-  "Hummus with vegetables and protein bread, Cottage cheese with seasonal fruit and pumpkin seeds";
+// ── Breakfast & snack idea banks + rotation rules. Authored by a 3-lens
+// brainstorm (max-protein / global-traditions / speed-formats) then synthesized
+// and adversarially de-biased. The old planner made the same "[dairy] bowl with
+// fruit and oats" every day — these banks force genuine format variety.
+const BREAKFAST_BANK = `Target ~500 kcal / ~40g protein each. Weekday items must be "5" (no-cook / assembly); items tagged "(weekend)" may be "15"/"30" and land ONLY on Sat/Sun. Anchor protein on Eggs, Skyr, Cottage cheese, Quark, Smoked salmon, Tuna, Turkey breast, Whey protein; keep Walnuts / Almonds / Olive oil / Honey as accents, never bulk. The cold-sweet-dairy-spoon family (jars, parfaits, bowls) is where the old monotony lived — fill a SAVORY / hot / hand-held slot first; reach for a spoon-from-jar item only after.
+
+SAVORY PLATE (no-cook, cold, weekday — use these before any spoon item):
+- Smoked-salmon lean plate: Smoked salmon, Cottage cheese, Baby spinach, Cherry tomatoes, Cucumber, Whole grain bread
+- Greek mezze plate: Feta, Cucumber, Tomato, Olive oil, Parsley, + 2 boiled Eggs
+- Savory cottage cheese plate: Cottage cheese, Cherry tomatoes, Cucumber, Chives, Olive oil, + 2 boiled Eggs
+- Labneh-style quark plate: Quark, Olive oil, Lemon, Cucumber, Cherry tomatoes, Whole grain bread, + 2 boiled Eggs
+
+TOAST & OPEN SANDWICH (no-cook, cold, weekday, savory):
+- Scandi salmon rye: Protein bread, Quark, Smoked salmon, sliced Egg, Dill, Cucumber, Lemon
+- Salmon-avocado toast: Protein bread, Smoked salmon, Avocado, Cottage cheese, Lemon, Dill
+- Tuna-tomato open sandwich: Whole grain bread, Tuna, Cottage cheese, Cherry tomatoes, Spring onions, Lemon, Parsley
+- Cottage-salmon protein toast: Protein bread, Cottage cheese, Smoked salmon, Cucumber, Dill, Lemon
+
+HAND-HELD / WRAP (no-cook, cold, weekday — eat one-handed):
+- Turkey hummus wrap: Whole grain bread, Turkey breast, Hummus, Baby spinach, Bell pepper
+- Turkey-egg wrap: Whole grain bread, Turkey breast, sliced Eggs, Baby spinach, Mozzarella
+- Tuna-salad wrap: Whole grain bread, Tuna, Cottage cheese, Spring onions, Cucumber, Lemon
+
+SMOOTHIE / SHAKE (cold, weekday — on the go):
+- Power protein shake: Whey protein, Skyr, Banana, Peanut butter, Oats (small scoop)
+- Green smoothie bowl: Skyr, Whey protein, Banana, Mango, Spinach, Pumpkin seeds
+
+SAVORY EGG (HOT — weekend only):
+- Spinach-feta omelette (weekend): Eggs, Egg whites, Spinach, Feta, Cherry tomatoes
+- Egg-white veggie scramble (weekend): Egg whites, Eggs, Baby spinach, Bell pepper, Feta, Avocado
+- Menemen (weekend): Eggs, Tomato, Bell pepper, Spring onions, Feta, Parsley
+- Shakshuka (weekend): Eggs, Tomato, Bell pepper, Spinach, Feta
+- Egg muffins — BATCH (weekend bake, eaten COLD Mon–Wed): Eggs, Egg whites, Spinach, Bell pepper, Feta
+
+PROTEIN PANCAKES (HOT, weekend only — sweet treat):
+- Banana protein pancakes (weekend): Oats, Egg whites, Whey protein, Banana, Cinnamon, topped Skyr + Mixed berries
+
+SPOON-FROM-JAR / PARFAIT (cold, sweet, weekday — counts toward the spoon-family cap):
+- Vanilla whey overnight oats: Oats, Whey protein, Skyr, Mixed berries, Cinnamon, Vanilla
+- Chocolate chia pudding: Chia seeds, Whey protein, Greek yogurt, Banana, Cinnamon
+- Strawberry chia jar: Chia seeds, Whey protein, Strawberries, Almonds, Honey
+- Bircher muesli: Oats, Skyr, Apple, Cinnamon, Walnuts, Mixed berries, Chia seeds
+- Berry parfait: Greek yogurt, Whey protein, Mixed berries, Walnuts
+
+PLAIN DAIRY BOWL (cold, weekday — HARD CAP 1/week; only when nothing else fits):
+- Skyr crunch bowl: Skyr, Mixed berries, Almonds, Honey, Cinnamon
+- Savory quark bowl: Quark, Chives, Spring onions, Cucumber, Cherry tomatoes, Pumpkin seeds`;
+
+const SNACK_BANK = `All ≤5 min, no-cook / assembly. Target ~300 kcal / ~24g protein. Anchor fruit-forward ideas with Skyr / Quark / Cottage cheese / Whey protein / Eggs rather than dropping them; trim portions to stay near 300 kcal.
+
+SAVORY (default here so days don't skew sweet):
+- Turkey cucumber roll-ups: Turkey breast, Cucumber, Quark, Chives
+- Smoked-salmon cucumber rolls: Smoked salmon, Quark, Dill, Cucumber
+- Hard-boiled eggs & tomatoes: Eggs, Cherry tomatoes, Olive oil
+- Tuna on rice cakes: Tuna, Rice cakes, Lemon, Spring onions
+- Tuna-cucumber boats: Cucumber, Tuna, Cottage cheese, Spring onions
+- Cottage cheese veggie dip: Cottage cheese, Bell pepper, Cucumber, Chives
+- Hummus & veg plate: Hummus, Bell pepper, Cucumber, Cherry tomatoes, + small Skyr or 1 Egg
+- Edamame pods: Edamame, Lemon, Spring onions
+- Cottage-turkey plate: Cottage cheese, Turkey breast, Cherry tomatoes
+- Cottage cheese rice cakes: Cottage cheese, Rice cakes, Tomato, Chives
+
+SWEET:
+- Quark honey-walnut cup: Quark, Honey, Walnuts, Cinnamon
+- Skyr berry-seed pot: Skyr, Strawberries, Pumpkin seeds
+- Greek yogurt almond crunch: Greek yogurt, Almonds, Cinnamon, Honey
+- PB protein pot: Skyr, Peanut butter, Banana, Cinnamon, Chia seeds
+- Chia-whey pot: Chia seeds, Whey protein, Mixed berries
+- Cottage cheese mango cup: Cottage cheese, Mango, Cinnamon
+- Apple + nut butter + skyr: Apple, Peanut butter, Skyr
+- Whey protein shake: Whey protein, Banana`;
+
+const BREAKFAST_SNACK_ROTATION = `- Produce 7 visibly different breakfast FORMATS across the week. No format more than TWICE, never on consecutive days.
+- HARD CAP the cold-sweet-dairy-spoon family: overnight-oats/chia jars + parfaits + plain bowls COMBINED at 2 per week, plain bowls specifically at 1. Default instead to savory plates, toast, hand-held wraps, or smoothies. Fill at least one savory format before any spoon item.
+- Each week: at least 3 SAVORY and 3 SWEET breakfasts, and at least 3 savory + 3 sweet snacks. On any single day, at least one of {breakfast, snack} must be savory — never pair a sweet breakfast with a sweet snack.
+- Rotate the PROTEIN BASE day to day (dairy → egg → fish → poultry → whey) so no source anchors more than 2 breakfasts. Same across snacks.
+- Cooked breakfasts (egg dishes, pancakes) land ONLY on Sat/Sun, tagged "(weekend)", max 2 per week. Every weekday breakfast and ALL snacks must be "5" (no-cook / assembly).
+- Enforce the floor: every breakfast ~40g protein / ~500 kcal, every snack ~24g / ~300 kcal. Anchor fruit ideas with Whey protein / Egg whites / Cottage cheese / extra Skyr; trim nuts/oil/honey if calories run over. Swap fruit to what's in season, keeping the canonical name.`;
 
 // ── System prompt — a "thinking chef" persona, parameterised by the time of
 // year and location so the chef cooks with what is genuinely in season. The
@@ -45,9 +119,9 @@ LANGUAGE — ALWAYS WRITE IN ENGLISH (never German, Italian, Spanish, French, or
 - "name": a concise, appetising English meal title. GOOD: "Sheet-Pan Harissa Chicken with Zucchini", "Miso-Glazed Salmon with Soba", "Summer Tomato & White Bean Salad with Tuna". BAD (never produce): "Hähnchenbrust alla Puttanesca", "Pollo a la Brasa", "Lachsfilet alla Siciliana". Translate any regional dish name to English.
 - "instructions": 1-2 short English sentences, action-focused.
 - "ingredients[].item": use ONLY these English canonical names — never a German equivalent, never with parens, never with modifiers:
-  PROTEINS: Chicken breast, Chicken thighs, Turkey breast, Ground turkey, Beef, Ground beef, Pork tenderloin, Lamb mince, Salmon fillet, Cod, White fish, Tuna, Shrimp, Eggs, Egg whites, Tofu, Whey protein
-  DAIRY: Skyr, Cottage cheese, Quark, Feta, Mozzarella, Halloumi, Parmesan, Greek yogurt, Natural yogurt, Milk
-  GRAINS & CARBS: Oats, Rice, Jasmine rice, Brown rice, Basmati rice, Bulgur, Lentils, Beluga lentils, Chickpeas, White beans, Black beans, Kidney beans, Soba noodles, Rice noodles, Whole grain bread, Whole grain tortilla, Protein bread, Tabbouleh, Couscous, Quinoa, Pasta, Polenta
+  PROTEINS: Chicken breast, Chicken thighs, Turkey breast, Ground turkey, Beef, Ground beef, Pork tenderloin, Lamb mince, Salmon fillet, Smoked salmon, Cod, White fish, Tuna, Shrimp, Eggs, Egg whites, Tofu, Whey protein
+  DAIRY: Skyr, Cottage cheese, Quark, Feta, Mozzarella, Halloumi, Parmesan, Ricotta, Greek yogurt, Natural yogurt, Milk
+  GRAINS & CARBS: Oats, Rice, Jasmine rice, Brown rice, Basmati rice, Bulgur, Lentils, Beluga lentils, Chickpeas, White beans, Black beans, Kidney beans, Soba noodles, Rice noodles, Whole grain bread, Whole grain tortilla, Protein bread, Rice cakes, Tabbouleh, Couscous, Quinoa, Pasta, Polenta
   PRODUCE: Banana, Apple, Pear, Mango, Pineapple, Mixed berries, Strawberries, Cherries, Plums, Peaches, Apricots, Grapes, Rhubarb, Lemon, Lime, Cucumber, Tomato, Cherry tomatoes, Chopped tomatoes, Bell pepper, Red onion, Onion, Spring onions, Leek, Pak choi, Broccoli, Cauliflower, Cabbage, Kale, Brussels sprouts, Zucchini, Eggplant, Green beans, Peas, Asparagus, Fennel, Baby spinach, Spinach, Chard, Carrot, Beetroot, Celeriac, Radishes, Kohlrabi, Avocado, Potato, Sweet potato, Pumpkin, Mushrooms, Corn, Lettuce
   HERBS/AROMATICS: Garlic, Ginger, Parsley, Cilantro, Basil, Mint, Dill, Rosemary, Thyme, Oregano, Sage, Chives, Bay leaves
   FATS/NUTS/SEEDS: Olive oil, Sesame oil, Coconut oil, Walnuts, Almonds, Cashews, Pumpkin seeds, Sunflower seeds, Chia seeds, Flax seeds, Peanut butter, Almond butter, Tahini
@@ -68,9 +142,16 @@ USE ONE consistent unit per ingredient across the whole week. Never mix tbsp/tsp
 INGREDIENT COUNTS: 4-8 ingredients per meal; snacks 2-4.
 Favor weight-loss-friendly high-protein staples for the protein backbone: Chicken breast, Beef, Salmon fillet, White fish, Eggs, Quark, Skyr, Cottage cheese, Lentils, Tofu.
 
-PREP-TIME TIERS: "5" = no-cook / assembly only, "15" = ≤15 min, "30" = ≤30 min, "60" = 30+ min.
-- Breakfast: prefer "5" (overnight oats, skyr/quark bowls with seasonal fruit, cottage cheese plates).
-- Snack: ALWAYS "5". Draw from this rotating pool, swapping in seasonal fruit: ${SNACK_POOL_EN}.`;
+PREP-TIME TIERS: "5" = no-cook / assembly only, "15" = ≤15 min, "30" = ≤30 min, "60" = 30+ min. Weekday breakfasts and ALL snacks must be "5". Cooked breakfasts ("15"/"30") land ONLY on Sat/Sun.
+
+BREAKFAST — the old plans were monotonous "[dairy] bowl with fruit and oats" every single day. Bring real variety: aim for 7 visibly different breakfast FORMATS across the week, mixing savory & sweet and hot & cold. Idea bank:
+${BREAKFAST_BANK}
+
+SNACK — rotate sweet & savory; never repeat one twice a week. Idea bank:
+${SNACK_BANK}
+
+BREAKFAST & SNACK ROTATION RULES — follow strictly across the 7-day week:
+${BREAKFAST_SNACK_ROTATION}`;
 }
 
 const MEAL_SCHEMA = {
@@ -123,9 +204,11 @@ const PLAN_SCHEMA = {
         additionalProperties: false,
         properties: {
           day: { type: "string", enum: DAYS },
-          concept: { type: "string" },
+          concept: { type: "string", description: "1-2 sentence lunch+dinner culinary direction" },
+          breakfast: { type: "string", description: "the breakfast FORMAT/idea assigned to this day (e.g. 'Savory smoked-salmon plate', 'Spinach-feta omelette (weekend)')" },
+          snack: { type: "string", description: "the snack assigned to this day (e.g. 'Turkey cucumber roll-ups')" },
         },
-        required: ["day", "concept"],
+        required: ["day", "concept", "breakfast", "snack"],
       },
     },
   },
@@ -158,22 +241,31 @@ function planPrompt(settings) {
   const avoid = settings.avoid ? `\nAVOID entirely (allergies / dislikes): ${settings.avoid}.` : "";
   return `Design a varied, seasonal 7-day menu blueprint (Mon → Sun) for this eater.
 
-For EACH of the 7 days, write a short 1-2 sentence culinary "concept" for that day's LUNCH and DINNER — name the inspiration / cuisine lean, the hero seasonal ingredient, and the technique. Think like a chef sketching a week's menu on a chalkboard.
+For EACH of the 7 days return FOUR things:
+- "concept": a short 1-2 sentence culinary direction for that day's LUNCH and DINNER — the inspiration / cuisine lean, the hero seasonal ingredient, and the technique. Think like a chef sketching a week's menu on a chalkboard.
+- "breakfast": the breakfast FORMAT assigned to this day, picked from the breakfast idea bank in your instructions.
+- "snack": the snack assigned to this day, picked from the snack idea bank.
 
-Across the week, deliberately VARY: cuisine (travel the world — don't repeat a country two days running), primary protein (max 3 days each), technique, and format. Anchor every day to what's in season this month. No two days should feel alike.
+LUNCH/DINNER variety: deliberately VARY cuisine (travel the world — don't repeat a country two days running), primary protein (max 3 days each), technique, and format. Anchor every day to what's in season this month. No two days alike.
 
-Breakfast and snack stay fast and high-protein (skyr / quark / oats / eggs / cottage cheese with seasonal fruit) — you don't need to detail those here, the day-cook will handle them.${prefs}${avoid}
+BREAKFAST & SNACK variety — assign these UP FRONT so the week is varied by design, not by chance: lay out Mon→Sun and give each day a DISTINCT breakfast format and a DISTINCT snack, obeying the breakfast/snack rotation rules in your instructions (7 different breakfast formats, cooked breakfasts only Sat/Sun, spoon-family bowls/jars/parfaits capped, mix sweet & savory, rotate the protein base, never a sweet breakfast + sweet snack on the same day).${prefs}${avoid}
 
-Return exactly 7 entries in "days", one per day Mon..Sun, each with a "concept".`;
+Return exactly 7 entries in "days", one per day Mon..Sun, each with concept + breakfast + snack.`;
 }
 
-function dayPrompt(day, settings, allowLongCook, existingNames, existingIngredients = [], concept = "") {
+function dayPrompt(day, settings, allowLongCook, existingNames, existingIngredients = [], concept = "", breakfastIdea = "", snackIdea = "") {
   const timeRule = allowLongCook
     ? 'TIME CONSTRAINT: At most ONE meal may be prep_time "60", and only dinner. Every other meal must be "5", "15", or "30".'
     : 'TIME CONSTRAINT: NO meal may be prep_time "60". Every meal must be "5", "15", or "30".';
   const conceptLine = concept
-    ? `\nTODAY'S CONCEPT (from the week's menu plan — build LUNCH and DINNER around this; keep breakfast and snack fast and high-protein): ${concept}`
+    ? `\nTODAY'S LUNCH + DINNER CONCEPT (from the week's menu plan — build lunch and dinner around this): ${concept}`
     : "";
+  const breakfastLine = breakfastIdea
+    ? `\nTODAY'S BREAKFAST (assigned by the menu plan — cook exactly this format, realised with fresh detail and on-target macros): ${breakfastIdea}`
+    : "\nBREAKFAST: pick a format from the breakfast idea bank that hasn't been used yet this week — favor a savory / hand-held / toast option over another dairy bowl.";
+  const snackLine = snackIdea
+    ? `\nTODAY'S SNACK (assigned by the menu plan): ${snackIdea}`
+    : "\nSNACK: pick from the snack idea bank, rotating sweet vs savory from the days already planned.";
   const avoidRepeats = existingNames.length
     ? `\nAlready on this week's menu (make today clearly different — different dishes, proteins, and formats, not just a renamed version): ${existingNames.join(" | ")}.`
     : "";
@@ -187,7 +279,7 @@ DAILY TARGETS: ${settings.kcalTarget} kcal, ${settings.proteinTarget}g protein, 
 PER-SLOT TARGETS:
 ${slotTargetLines(settings)}
 
-${timeRule}${conceptLine}${avoidRepeats}${reuseIngredients}
+${timeRule}${conceptLine}${breakfastLine}${snackLine}${avoidRepeats}${reuseIngredients}
 
 Return exactly 4 meals in "meals", in slot order: breakfast, lunch, dinner, snack.`;
 }
@@ -254,6 +346,8 @@ export default async function handler(req, res) {
     existingNames = [],
     existingIngredients = [],
     concept = "",
+    breakfastIdea = "",
+    snackIdea = "",
     monthName = "",
     location = "",
     seasonalHint = "",
@@ -284,13 +378,13 @@ export default async function handler(req, res) {
     mode === "plan"
       ? planPrompt(settings)
       : mode === "day"
-        ? dayPrompt(day, settings, allowLongCook, names, ingredients, concept)
+        ? dayPrompt(day, settings, allowLongCook, names, ingredients, concept, breakfastIdea, snackIdea)
         : mealPrompt(day, slot, settings, names);
 
   try {
     const message = await anthropic.messages.create({
       model: MODEL,
-      max_tokens: mode === "day" ? 4000 : mode === "plan" ? 1500 : 1500,
+      max_tokens: mode === "day" ? 4000 : mode === "plan" ? 2000 : 1500,
       thinking: { type: "disabled" },
       output_config: {
         format: { type: "json_schema", schema },

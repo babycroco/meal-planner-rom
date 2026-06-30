@@ -280,6 +280,9 @@ const INGREDIENT_ALIAS = {
   "dijon mustard": "Dijon mustard", "senf": "Dijon mustard", "mustard": "Dijon mustard",
   "vinegar": "Vinegar", "essig": "Vinegar", "apple cider vinegar": "Apple cider vinegar", "balsamic vinegar": "Balsamic vinegar", "balsamico": "Balsamic vinegar",
   "whey protein": "Whey protein", "whey protein powder": "Whey protein", "molkenprotein": "Whey protein", "protein pulver": "Whey protein",
+  "smoked salmon": "Smoked salmon", "räucherlachs": "Smoked salmon", "raucherlachs": "Smoked salmon",
+  "rice cakes": "Rice cakes", "rice cake": "Rice cakes", "reiswaffeln": "Rice cakes",
+  "labneh": "Quark", "ricotta": "Ricotta",
 
   // Herbs / spices
   "salt": "Salt", "salz": "Salt",
@@ -549,6 +552,24 @@ function consolidateGrocery(meals, pantry = []) {
 
 const UNITS = ["g", "ml", "piece", "tbsp", "tsp"];
 const EMPTY_PANTRY_DRAFT = { item: "", qty: "", unit: "g", section: "Produce" };
+
+// Drop junk/placeholder meal entries that can linger in storage from
+// interrupted generations or old test data (e.g. "dummy3", "Placeholder2",
+// 0–1 kcal stubs). A real meal always has a sensible name and kcal. Cleaning
+// on load means stale cubes vanish on the next page refresh — no manual reset.
+const JUNK_NAME = /^(dummy|placeholder|filler|test|todo|tbd|x)\b/i;
+function sanitizeMeals(meals) {
+  if (!meals || typeof meals !== "object") return {};
+  const clean = {};
+  for (const [k, m] of Object.entries(meals)) {
+    if (!m || typeof m !== "object") continue;
+    const name = (m.name || "").trim();
+    if (!name || JUNK_NAME.test(name)) continue;
+    if (!(Number(m.kcal) >= 20)) continue;
+    clean[k] = m;
+  }
+  return clean;
+}
 
 // ── Tiny presentational helpers ───────────────────────────────────────
 
@@ -861,7 +882,7 @@ function ComingSoon({ icon: Icon, title, description }) {
 
 export default function App() {
   const [settings, setSettings] = useState(() => ({ ...DEFAULT_SETTINGS, ...load("settings_v2", {}) }));
-  const [meals, setMeals] = useState(() => load("meals_v2", {}));
+  const [meals, setMeals] = useState(() => sanitizeMeals(load("meals_v2", {})));
   const [activeProgramId, setActiveProgramId] = useState(() => load("activeProgram", "cut"));
   // Snapshot of the season the current week was cooked for — drives the chip.
   const [weekContext, setWeekContext] = useState(() => load("weekContext_v1", null));
@@ -1022,20 +1043,31 @@ export default function App() {
       location: settings.location || "Germany",
       seasonalHint: season.seasonalHint,
     };
+    // Wipe any stale / junk meals up front so a fresh week never inherits
+    // leftover cubes. We restore the previous week only if generation produces
+    // nothing at all (transient failure), so a good week isn't lost on a hiccup.
+    const prevMeals = meals;
+    setMeals({});
     try {
       // Phase 1 — the chef sketches the whole week's menu at once: a varied,
       // seasonal blueprint with one culinary concept per day. Best-effort;
       // if it fails we fall back to per-day generation without concepts.
-      let conceptByDay = {};
+      const planByDay = {}; // day → { concept, breakfast, snack }
       try {
         const blueprint = await apiPlanWeek(settings, ctx);
         if (Array.isArray(blueprint)) {
           for (const d of blueprint) {
-            if (d?.day && d?.concept) conceptByDay[d.day] = d.concept;
+            if (d?.day) {
+              planByDay[d.day] = {
+                concept: d.concept || "",
+                breakfastIdea: d.breakfast || "",
+                snackIdea: d.snack || "",
+              };
+            }
           }
         }
       } catch (planErr) {
-        console.warn("Week planning failed, generating without concepts:", planErr);
+        console.warn("Week planning failed, generating without a blueprint:", planErr);
       }
 
       // Phase 2 — cook each day to fulfil its concept, day by day, keeping
@@ -1050,7 +1082,9 @@ export default function App() {
         const ingredientList = [...usedIngredients.values()];
         const dayMeals = await generateDay(day, settings, allowLongCook, usedNames, ingredientList, {
           ...ctx,
-          concept: conceptByDay[day] || "",
+          concept: planByDay[day]?.concept || "",
+          breakfastIdea: planByDay[day]?.breakfastIdea || "",
+          snackIdea: planByDay[day]?.snackIdea || "",
         });
         SLOTS.forEach((slot, i) => {
           const meal = dayMeals[i];
@@ -1074,6 +1108,9 @@ export default function App() {
     } catch (e) {
       console.error(e);
       setError(e.message);
+      // If nothing got generated before the failure, put the previous week
+      // back so a transient error doesn't leave the planner empty.
+      setMeals((cur) => (Object.keys(cur).length ? cur : prevMeals));
     }
     setLoading(false);
   };
@@ -1129,7 +1166,7 @@ export default function App() {
       const payload = JSON.parse(json);
       if (!payload.meals) throw new Error("Invalid plan code");
       if (payload.settings) setSettings({ ...DEFAULT_SETTINGS, ...payload.settings });
-      setMeals(payload.meals || {});
+      setMeals(sanitizeMeals(payload.meals || {}));
       if (Array.isArray(payload.pantry)) setPantry(payload.pantry);
       setImportText("");
       setTransferOpen(false);
