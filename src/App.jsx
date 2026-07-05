@@ -61,6 +61,17 @@ const PROGRAMS = [
 ];
 const PROGRAM_BY_ID = Object.fromEntries(PROGRAMS.map((p) => [p.id, p]));
 
+// Map raw/technical error strings to user-safe banner copy. The raw error is
+// still logged to the console at each call site; only the user-facing text is
+// softened so backend/config messages (e.g. "APP_SECRET is not set") never
+// surface in the UI. Known-friendly transient messages pass through unchanged.
+const USER_SAFE_ERROR = [/try again/i, /network error/i, /paste a plan code/i, /invalid plan code/i];
+function friendlyError(msg) {
+  return typeof msg === "string" && USER_SAFE_ERROR.some((re) => re.test(msg))
+    ? msg
+    : "Something went wrong. Please try again.";
+}
+
 // Seasonal produce by month for Central Europe (Germany) — what's genuinely
 // fresh, local, and at its peak at the market. The chef is told to cook with
 // these so a late-June week tastes like late June, not like January. Index 0
@@ -782,14 +793,18 @@ function SidebarSection({ title, children }) {
   );
 }
 
-function SidebarItem({ icon: Icon, label, active, onClick, dotColor }) {
+function SidebarItem({ icon: Icon, label, subtitle, active, onClick, dotColor }) {
   return (
     <button
       onClick={onClick}
+      aria-current={active ? "page" : undefined}
       className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium text-left transition-colors ${active ? "bg-surface-soft text-ink" : "text-charcoal hover:bg-surface-soft"}`}
     >
       {Icon && <Icon size={16} strokeWidth={2} className={active ? "text-ink" : "text-steel"} />}
-      <span className="flex-1 truncate">{label}</span>
+      <span className="flex-1 min-w-0">
+        <span className="block truncate">{label}</span>
+        {subtitle && <span className="block truncate text-[11px] font-normal leading-tight text-steel">{subtitle}</span>}
+      </span>
       {dotColor && (
         <span className="w-1.5 h-1.5 rounded-full" style={{ background: dotColor }} />
       )}
@@ -812,6 +827,7 @@ function Sidebar({
         />
       )}
       <aside
+        aria-label="Sidebar"
         className={`fixed inset-y-0 left-0 z-40 w-60 bg-surface border-r border-hairline flex flex-col transform transition-transform lg:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
       >
         <div className="h-16 px-5 flex items-center justify-between border-b border-hairline">
@@ -828,7 +844,7 @@ function Sidebar({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-2.5 py-4">
+        <nav aria-label="Primary" className="flex-1 overflow-y-auto px-2.5 py-4">
           <SidebarSection title="Workspace">
             <SidebarItem icon={Calendar} label="This week" active={view === "plan"} onClick={() => { setView("plan"); onCloseSidebar(); }} />
             <SidebarItem icon={ShoppingCart} label="Grocery list" active={view === "grocery"} onClick={() => { setView("grocery"); onCloseSidebar(); }} />
@@ -836,19 +852,19 @@ function Sidebar({
           </SidebarSection>
 
           <SidebarSection title="Programs">
-            <SidebarItem icon={Flame} label="Cut" active={activeProgramId === "cut"} onClick={() => switchProgram("cut")} dotColor={activeProgramId === "cut" ? "var(--primary)" : null} />
-            <SidebarItem icon={Dumbbell} label="Maintain" active={activeProgramId === "maintain"} onClick={() => switchProgram("maintain")} dotColor={activeProgramId === "maintain" ? "var(--primary)" : null} />
-            <SidebarItem icon={TrendingUp} label="Lean bulk" active={activeProgramId === "leanbulk"} onClick={() => switchProgram("leanbulk")} dotColor={activeProgramId === "leanbulk" ? "var(--primary)" : null} />
+            <SidebarItem icon={Flame} label="Cut" subtitle="lose weight" active={activeProgramId === "cut"} onClick={() => switchProgram("cut")} dotColor={activeProgramId === "cut" ? "var(--primary)" : null} />
+            <SidebarItem icon={Dumbbell} label="Maintain" subtitle="hold weight" active={activeProgramId === "maintain"} onClick={() => switchProgram("maintain")} dotColor={activeProgramId === "maintain" ? "var(--primary)" : null} />
+            <SidebarItem icon={TrendingUp} label="Lean bulk" subtitle="gain muscle" active={activeProgramId === "leanbulk"} onClick={() => switchProgram("leanbulk")} dotColor={activeProgramId === "leanbulk" ? "var(--primary)" : null} />
           </SidebarSection>
 
           <SidebarSection title="Tools">
             <SidebarItem icon={MessageCircle} label="Coach" active={view === "coach"} onClick={() => { setView("coach"); onCloseSidebar(); }} />
           </SidebarSection>
-        </div>
+        </nav>
 
         <div className="border-t border-hairline p-3 flex items-center gap-1">
           <IconButton label="Settings" onClick={onSettings}><SettingsIcon size={18} /></IconButton>
-          <IconButton label="Sync" onClick={onSync}><Share2 size={18} /></IconButton>
+          <IconButton label="Transfer" onClick={onSync}><Share2 size={18} /></IconButton>
           <button
             onClick={onGenerate}
             disabled={loading}
@@ -937,7 +953,7 @@ export default function App() {
       ]);
     } catch (e) {
       console.error(e);
-      setError(`Coach: ${e.message}`);
+      setError(`Coach: ${friendlyError(e.message)}`);
     }
     setCoachLoading(false);
   };
@@ -1107,7 +1123,7 @@ export default function App() {
       });
     } catch (e) {
       console.error(e);
-      setError(e.message);
+      setError(friendlyError(e.message));
       // If nothing got generated before the failure, put the previous week
       // back so a transient error doesn't leave the planner empty.
       setMeals((cur) => (Object.keys(cur).length ? cur : prevMeals));
@@ -1133,7 +1149,7 @@ export default function App() {
       setMeals((prev) => ({ ...prev, [key]: meal }));
     } catch (e) {
       console.error(e);
-      setError(`Regeneration failed: ${e.message}`);
+      setError(`Regeneration failed: ${friendlyError(e.message)}`);
     }
     setRegenKey(null);
   };
@@ -1198,6 +1214,12 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-canvas text-ink">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:top-2 focus:left-2 focus:px-3 focus:py-2 focus:rounded-md focus:bg-primary focus:text-white focus:text-sm focus:font-medium"
+      >
+        Skip to content
+      </a>
       <Sidebar
         view={view}
         setView={setView}
@@ -1236,7 +1258,7 @@ export default function App() {
           </button>
         </header>
 
-        <main className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-10 py-6 lg:py-10">
+        <main id="main-content" className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-10 py-6 lg:py-10">
           {/* ── Page heading ────────────────────────────────────── */}
           <header className="mb-8">
             <Eyebrow>Week 01 · {activeProgram.name}</Eyebrow>
@@ -1265,7 +1287,7 @@ export default function App() {
           <div className="mb-6 p-4 rounded-lg flex items-start gap-3 fade-in" style={{ background: "var(--error-tint)" }}>
             <AlertCircle size={18} className="shrink-0 mt-0.5 text-error" />
             <div className="flex-1 text-sm text-error font-medium">{error}</div>
-            <button onClick={() => setError(null)} className="text-error/70 hover:text-error">
+            <button onClick={() => setError(null)} aria-label="Dismiss" className="text-error/70 hover:text-error">
               <X size={16} />
             </button>
           </div>
@@ -1614,7 +1636,7 @@ export default function App() {
             )}
 
             {/* Input — always at the bottom, sticky-feel */}
-            <div className="bg-canvas border border-hairline rounded-lg p-3 sticky bottom-4 shadow-s1">
+            <div className="bg-canvas border border-hairline rounded-lg p-3 sticky bottom-4 shadow-s1 focus-within:border-primary transition-colors">
               <form
                 onSubmit={(e) => { e.preventDefault(); sendCoachMessage(coachInput); }}
                 className="flex items-center gap-2"
@@ -1693,9 +1715,9 @@ export default function App() {
         )}
       </Modal>
 
-      {/* ── Sync modal ─────────────────────────────────────────── */}
+      {/* ── Transfer modal ─────────────────────────────────────── */}
       <Modal open={transferOpen} onClose={() => setTransferOpen(false)} maxWidth="max-w-lg">
-        <ModalHeader title="Sync" onClose={() => setTransferOpen(false)} />
+        <ModalHeader title="Transfer" onClose={() => setTransferOpen(false)} />
         <div className="p-6 pt-5">
           <div className="inline-flex w-full p-1 rounded-md bg-surface-soft mb-5">
             <button
@@ -1716,7 +1738,7 @@ export default function App() {
             hasMeals ? (
               <>
                 <p className="text-sm text-slate leading-relaxed mb-4">
-                  Move this week to another device: copy the code, send it to yourself (Notes or iMessage), then open the planner there, tap <span className="text-primary font-medium">Sync → Import</span>, and paste.
+                  Move this week to another device: copy the code, send it to yourself (Notes or iMessage), then open the planner there, tap <span className="text-primary font-medium">Transfer → Import</span>, and paste.
                 </p>
                 <textarea
                   readOnly

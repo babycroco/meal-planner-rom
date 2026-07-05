@@ -54,8 +54,8 @@
   --ink: #191919;
   --charcoal: #37352F;         /* signature warm-charcoal */
   --slate: #5C5A54;
-  --steel: #87867F;
-  --stone: #9B9A93;
+  --steel: #66655E;            /* darkened for WCAG AA — ~5.9:1 on white (was 3.65:1, failing) */
+  --stone: #726F66;            /* darkened for WCAG AA — ~5.0:1 on white (was 2.82:1, failing) */
   --muted: #C4C3BD;
   --on-dark: #FFFFFF;
   --on-dark-muted: rgba(255, 255, 255, 0.62);
@@ -77,6 +77,14 @@
 
   /* Type */
   --font-sans: "Inter", "Notion Sans", -apple-system, system-ui, "Segoe UI", Helvetica, sans-serif;
+}
+
+/* Keyboard-only focus ring — applies to :focus-visible (keyboard / assistive
+   tech), so it never alters the resting, mouse-driven appearance. */
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 html,
@@ -123,4 +131,19 @@ body {
 
 .fade-in {
   animation: fadeIn 0.4s ease-out both;
+}
+
+/* Respect users who prefer reduced motion — disable the entrance fade and any
+   looping spinners rather than animating them. */
+@media (prefers-reduced-motion: reduce) {
+  .fade-in {
+    animation: none;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
