@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   Settings as SettingsIcon,
   Sparkles,
@@ -584,9 +584,37 @@ function sanitizeMeals(meals) {
 
 // ── Tiny presentational helpers ───────────────────────────────────────
 
+// Animate a number from its previous value to `target` with ease-out cubic.
+// Skipped entirely (jumps straight to target) under prefers-reduced-motion.
+function useCountUp(target, duration = 700) {
+  const safeTarget = Number.isFinite(Number(target)) ? Number(target) : 0;
+  const [display, setDisplay] = useState(safeTarget);
+  const prevRef = useRef(0);
+  useEffect(() => {
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      setDisplay(safeTarget);
+      prevRef.current = safeTarget;
+      return;
+    }
+    const from = prevRef.current;
+    const start = performance.now();
+    let raf;
+    const tick = (now) => {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setDisplay(Math.round(from + (safeTarget - from) * eased));
+      if (t < 1) raf = requestAnimationFrame(tick);
+      else prevRef.current = safeTarget;
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [safeTarget, duration]);
+  return display;
+}
+
 function Button({ variant = "primary", className = "", children, ...props }) {
   const base =
-    "inline-flex items-center justify-center gap-2 rounded-md font-medium text-sm leading-tight px-[18px] py-[10px] transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap";
+    "btn-spring inline-flex items-center justify-center gap-2 rounded-md font-medium text-sm leading-tight px-[18px] py-[10px] transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap";
   const styles = {
     primary: "bg-primary text-white hover:bg-primary-pressed",
     dark: "bg-ink-deep text-white hover:opacity-90",
@@ -610,7 +638,7 @@ function IconButton({ label, onClick, children, className = "" }) {
       onClick={onClick}
       aria-label={label}
       title={label}
-      className={`w-10 h-10 inline-flex items-center justify-center rounded-md text-charcoal hover:bg-surface-soft transition-colors ${className}`}
+      className={`btn-spring w-10 h-10 inline-flex items-center justify-center rounded-md text-charcoal hover:bg-surface-soft transition-colors ${className}`}
     >
       {children}
     </button>
@@ -637,11 +665,12 @@ function Input(props) {
 }
 
 function MacroStat({ label, value, unit, target }) {
+  const animated = useCountUp(value);
   return (
     <div className="px-5 py-4">
       <Eyebrow>{label}</Eyebrow>
       <div className="mt-1 text-3xl font-semibold tnum text-ink leading-none">
-        {value}
+        {animated.toLocaleString()}
         {unit && <span className="text-base font-normal text-steel ml-0.5">{unit}</span>}
       </div>
       {target != null && (
@@ -669,7 +698,7 @@ function MealTile({ slot, meal, isRegen, onClick, onRegen }) {
     <button
       onClick={meal ? onClick : undefined}
       disabled={!meal}
-      className="group relative w-full text-left p-3 rounded-md border border-transparent disabled:cursor-default transition-colors"
+      className="tile-lift group relative w-full text-left p-3 rounded-md border border-transparent disabled:cursor-default"
       style={{ background: SLOT_TINTS[slot] }}
     >
       <div className="flex items-center justify-between gap-2 mb-1.5">
@@ -719,14 +748,14 @@ function MealTile({ slot, meal, isRegen, onClick, onRegen }) {
 function DayCard({ dayIndex, day, isToday, kcal, protein, carbs, fat, meals, regenKey, onOpenMeal, onRegen }) {
   return (
     <article
-      className="bg-canvas rounded-lg border border-hairline p-4 flex flex-col gap-3 hover:shadow-s2 transition-shadow fade-in"
-      style={{ animationDelay: `${dayIndex * 45}ms` }}
+      className="bg-canvas rounded-lg border border-hairline p-4 flex flex-col gap-3 hover:shadow-s2 pop-in card-lift"
+      style={{ animationDelay: `${dayIndex * 60}ms` }}
     >
       <header className="flex items-baseline justify-between gap-2 pb-2.5 border-b border-hairline-soft">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-lg font-semibold text-ink tracking-[-0.2px]">{day}</span>
           {isToday && (
-            <span className="px-2 py-0.5 rounded-full bg-primary text-white text-[10px] font-semibold uppercase tracking-[0.08em] leading-none">
+            <span className="pulse-today px-2 py-0.5 rounded-full bg-primary text-white text-[10px] font-semibold uppercase tracking-[0.08em] leading-none">
               Today
             </span>
           )}
@@ -761,12 +790,12 @@ function Modal({ open, onClose, children, maxWidth = "max-w-lg" }) {
   if (!open) return null;
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 scrim-in"
       style={{ background: "var(--scrim)" }}
       onClick={onClose}
     >
       <div
-        className={`${maxWidth} w-full max-h-[90vh] overflow-y-auto bg-canvas rounded-lg border border-hairline shadow-s4`}
+        className={`${maxWidth} w-full max-h-[90vh] overflow-y-auto bg-canvas rounded-lg border border-hairline shadow-s4 modal-in`}
         onClick={(e) => e.stopPropagation()}
       >
         {children}
@@ -798,7 +827,7 @@ function SidebarItem({ icon: Icon, label, subtitle, active, onClick, dotColor })
     <button
       onClick={onClick}
       aria-current={active ? "page" : undefined}
-      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium text-left transition-colors ${active ? "bg-surface-soft text-ink" : "text-charcoal hover:bg-surface-soft"}`}
+      className={`nav-nudge w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium text-left ${active ? "bg-surface-soft text-ink" : "text-charcoal hover:bg-surface-soft"}`}
     >
       {Icon && <Icon size={16} strokeWidth={2} className={active ? "text-ink" : "text-steel"} />}
       <span className="flex-1 min-w-0">
@@ -868,7 +897,7 @@ function Sidebar({
           <button
             onClick={onGenerate}
             disabled={loading}
-            className="ml-auto inline-flex items-center justify-center gap-2 rounded-md font-medium text-sm leading-tight px-3 py-2 bg-primary text-white hover:bg-primary-pressed transition-colors disabled:opacity-50"
+            className={`btn-spring ml-auto inline-flex items-center justify-center gap-2 rounded-md font-medium text-sm leading-tight px-3 py-2 bg-primary text-white hover:bg-primary-pressed transition-colors disabled:opacity-50 ${loading ? "generating" : ""}`}
           >
             {loading ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
             {hasMeals ? "Regenerate" : "Generate"}
@@ -1252,7 +1281,7 @@ export default function App() {
             onClick={generateWeek}
             disabled={loading}
             aria-label="Regenerate"
-            className="inline-flex items-center justify-center w-9 h-9 rounded-md bg-primary text-white disabled:opacity-50"
+            className={`btn-spring inline-flex items-center justify-center w-9 h-9 rounded-md bg-primary text-white disabled:opacity-50 ${loading ? "generating" : ""}`}
           >
             {loading ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
           </button>
@@ -1273,8 +1302,8 @@ export default function App() {
               </p>
             )}
             {view === "plan" && hasMeals && weekContext?.headline?.length > 0 && (
-              <div className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-tint-mint text-brand-green text-[11px] font-semibold tracking-[0.02em]">
-                <span aria-hidden>🌿</span>
+              <div className="pop-in mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-tint-mint text-brand-green text-[11px] font-semibold tracking-[0.02em]" style={{ animationDelay: "150ms" }}>
+                <span aria-hidden className="wiggle-hello">🌿</span>
                 <span>
                   {weekContext.monthName} · in season: {weekContext.headline.slice(0, 4).join(", ")}
                 </span>
@@ -1373,10 +1402,11 @@ export default function App() {
             </p>
 
             <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-              {groceryCategories.map(({ section, items }) => (
+              {groceryCategories.map(({ section, items }, si) => (
                 <div
                   key={section}
-                  className="bg-canvas rounded-lg border border-hairline p-5"
+                  className="bg-canvas rounded-lg border border-hairline p-5 pop-in"
+                  style={{ animationDelay: `${si * 60}ms` }}
                 >
                   <div className="flex items-center justify-between gap-3 mb-3 pb-3 border-b border-hairline-soft">
                     <Eyebrow>{section}</Eyebrow>
@@ -1393,7 +1423,7 @@ export default function App() {
                           className="group w-full flex items-center gap-3 py-1.5 px-1 text-left rounded-sm hover:bg-surface-soft transition-colors"
                         >
                           <span
-                            className="w-4 h-4 rounded-xs grid place-items-center shrink-0 border border-hairline-strong group-hover:border-primary group-hover:bg-primary/10 transition-colors"
+                            className="check-pop w-4 h-4 rounded-xs grid place-items-center shrink-0 border border-hairline-strong group-hover:border-primary group-hover:bg-primary/10"
                           />
                           <span className="flex-1 text-sm capitalize text-ink">
                             {ing.item}
@@ -1506,8 +1536,8 @@ export default function App() {
               </div>
             ) : (
               <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-                {pantryBySection.map(({ section, items }) => (
-                  <div key={section} className="bg-canvas rounded-lg border border-hairline p-5">
+                {pantryBySection.map(({ section, items }, si) => (
+                  <div key={section} className="bg-canvas rounded-lg border border-hairline p-5 pop-in" style={{ animationDelay: `${si * 60}ms` }}>
                     <div className="mb-3 pb-3 border-b border-hairline-soft flex items-center justify-between">
                       <Eyebrow>{section}</Eyebrow>
                       <span className="text-xs text-stone font-medium tnum">{items.length}</span>
