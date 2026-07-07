@@ -185,7 +185,11 @@ const MEAL_SCHEMA = {
     },
     instructions: { type: "string" },
   },
-  required: ["name", "kcal", "protein_g", "carbs_g", "fat_g", "prep_time", "ingredients", "instructions"],
+  // Anthropic structured outputs (strict json_schema) require EVERY property to
+  // be listed in `required` when additionalProperties is false — so `emoji` is
+  // required too. Backward-compat is handled on the render side (old meals
+  // without an emoji still display fine).
+  required: ["name", "emoji", "kcal", "protein_g", "carbs_g", "fat_g", "prep_time", "ingredients", "instructions"],
 };
 
 const DAY_SCHEMA = {
@@ -233,9 +237,10 @@ const RECIPE_SCHEMA = {
       items: { type: "string" },
       description: "5-10 ordered cooking steps; each references the exact ingredient quantities from the meal",
     },
-    tips: { type: "string", description: "one optional short tip (timing, doneness, make-ahead)" },
+    tips: { type: "string", description: "one short tip (timing, doneness, make-ahead)" },
   },
-  required: ["steps"],
+  // Strict json_schema requires every property in `required` (see MEAL_SCHEMA).
+  required: ["steps", "tips"],
 };
 
 function slotTargets(settings, slot) {
