@@ -118,6 +118,7 @@ CULINARY RANGE — this is what makes you a chef, not a template:
 LANGUAGE — ALWAYS WRITE IN ENGLISH (never German, Italian, Spanish, French, or any other language):
 - "name": a concise, appetising English meal title. GOOD: "Sheet-Pan Harissa Chicken with Zucchini", "Miso-Glazed Salmon with Soba", "Summer Tomato & White Bean Salad with Tuna". BAD (never produce): "Hähnchenbrust alla Puttanesca", "Pollo a la Brasa", "Lachsfilet alla Siciliana". Translate any regional dish name to English.
 - "instructions": 1-2 short English sentences, action-focused.
+- "emoji": exactly ONE food emoji that best captures the dish (e.g. 🍜 🌮 🐟 🥗 🍳 🥘 🍲 🌯 🥩). A single food/drink emoji only — never a flag, never two emoji, never text.
 - "ingredients[].item": use ONLY these English canonical names — never a German equivalent, never with parens, never with modifiers:
   PROTEINS: Chicken breast, Chicken thighs, Turkey breast, Ground turkey, Beef, Ground beef, Pork tenderloin, Lamb mince, Salmon fillet, Smoked salmon, Cod, White fish, Tuna, Shrimp, Eggs, Egg whites, Tofu, Whey protein
   DAIRY: Skyr, Cottage cheese, Quark, Feta, Mozzarella, Halloumi, Parmesan, Ricotta, Greek yogurt, Natural yogurt, Milk
@@ -159,6 +160,7 @@ const MEAL_SCHEMA = {
   additionalProperties: false,
   properties: {
     name: { type: "string" },
+    emoji: { type: "string", description: "exactly one food emoji capturing the dish (no flags)" },
     kcal: { type: "number" },
     protein_g: { type: "number" },
     carbs_g: { type: "number" },
@@ -219,6 +221,21 @@ const PLAN_SCHEMA = {
     },
   },
   required: ["days", "ingredientPalette"],
+};
+
+// Cook mode (item 10): expand a finished meal into step-by-step instructions.
+const RECIPE_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    steps: {
+      type: "array",
+      items: { type: "string" },
+      description: "5-10 ordered cooking steps; each references the exact ingredient quantities from the meal",
+    },
+    tips: { type: "string", description: "one optional short tip (timing, doneness, make-ahead)" },
+  },
+  required: ["steps"],
 };
 
 function slotTargets(settings, slot) {
@@ -346,6 +363,28 @@ TARGET: ~${t.kcal} kcal, ~${t.protein}g protein, ~${t.carbs}g carbs, ~${t.fat}g 
 ${timeRule}${avoidRepeats}`;
 }
 
+// Cook mode (item 10): a lightweight instructor persona — no seasonal/planning
+// context needed, just precise steps for a dish that already exists.
+const RECIPE_SYSTEM =
+  "You are a precise, encouraging cooking instructor. Given a single dish with its ingredients and exact quantities, write clear numbered steps a home cook can follow to make exactly that dish tonight. Always write in English. Reference the real quantities given (e.g. \"the 150g chicken breast\"). Keep each step to one action. Assume basic equipment.";
+
+function recipePrompt(meal) {
+  const ingredients = Array.isArray(meal?.ingredients)
+    ? meal.ingredients.map((i) => `${i.item} — ${i.qty} ${i.unit}`).join("\n")
+    : "(no ingredient list provided)";
+  const macros =
+    meal?.kcal != null
+      ? `\nMACROS (for context, don't restate): ${meal.kcal} kcal, ${meal.protein_g}g protein, ${meal.carbs_g}g carbs, ${meal.fat_g}g fat.`
+      : "";
+  const method = meal?.instructions ? `\nSHORT METHOD (expand this into full steps): ${meal.instructions}` : "";
+  return `Write the full recipe for "${meal?.name || "this dish"}".
+
+INGREDIENTS (use these exact quantities):
+${ingredients}${method}${macros}
+
+Return "steps": 5-10 short numbered cooking steps, in order, each a single clear action that references the real quantities where relevant (prep → cook → finish → plate). Optionally return "tips": one short practical tip. English only.`;
+}
+
 function validSettings(s) {
   return (
     s &&
@@ -385,6 +424,7 @@ export default async function handler(req, res) {
     day,
     slot,
     settings,
+    meal,
     allowLongCook = false,
     existingNames = [],
     existingIngredients = [],
@@ -402,13 +442,17 @@ export default async function handler(req, res) {
     seasonalHint = "",
   } = body || {};
 
-  if (mode !== "day" && mode !== "meal" && mode !== "plan") {
-    return res.status(400).json({ error: "'mode' must be 'plan', 'day', or 'meal'." });
+  if (mode !== "day" && mode !== "meal" && mode !== "plan" && mode !== "recipe") {
+    return res.status(400).json({ error: "'mode' must be 'plan', 'day', 'meal', or 'recipe'." });
   }
-  if (!validSettings(settings)) {
+  // Recipe mode operates on a finished meal object; it needs no macro settings.
+  if (mode !== "recipe" && !validSettings(settings)) {
     return res.status(400).json({ error: "'settings' must include numeric macro targets." });
   }
-  if (mode !== "plan" && !DAYS.includes(day)) {
+  if (mode === "recipe" && (!meal || typeof meal !== "object" || !Array.isArray(meal.ingredients))) {
+    return res.status(400).json({ error: "'meal' (with an ingredients array) is required for recipe mode." });
+  }
+  if ((mode === "day" || mode === "meal") && !DAYS.includes(day)) {
     return res.status(400).json({ error: "'day' must be one of Mon-Sun." });
   }
   if (mode === "meal" && !SLOTS.includes(slot)) {
@@ -428,8 +472,11 @@ export default async function handler(req, res) {
 
   const anthropic = new Anthropic({ apiKey });
 
-  const systemText = buildSystemPrompt({ monthName, location, seasonalHint });
-  const schema = mode === "plan" ? PLAN_SCHEMA : mode === "day" ? DAY_SCHEMA : MEAL_SCHEMA;
+  // Recipe mode uses its own lightweight instructor persona (no seasonal
+  // planning context); all other modes share the cacheable chef system block.
+  const systemText = mode === "recipe" ? RECIPE_SYSTEM : buildSystemPrompt({ monthName, location, seasonalHint });
+  const schema =
+    mode === "plan" ? PLAN_SCHEMA : mode === "day" ? DAY_SCHEMA : mode === "recipe" ? RECIPE_SCHEMA : MEAL_SCHEMA;
   const userContent =
     mode === "plan"
       ? planPrompt(settings, {
@@ -452,7 +499,9 @@ export default async function handler(req, res) {
             othersText,
             bannedList,
           )
-        : mealPrompt(day, slot, settings, names);
+        : mode === "recipe"
+          ? recipePrompt(meal)
+          : mealPrompt(day, slot, settings, names);
 
   try {
     const message = await anthropic.messages.create({
@@ -503,6 +552,12 @@ export default async function handler(req, res) {
         });
       }
       return res.status(200).json({ meals: data.meals });
+    }
+    if (mode === "recipe") {
+      if (!Array.isArray(data.steps) || data.steps.length === 0) {
+        return res.status(502).json({ error: "The recipe came back empty. Try again." });
+      }
+      return res.status(200).json({ steps: data.steps, tips: typeof data.tips === "string" ? data.tips : "" });
     }
     return res.status(200).json({ meal: data });
   } catch (err) {

@@ -212,7 +212,7 @@ batch, verify in preview between batches, ask Rom before each push.
 - [x] 4. Undo toast (cart → pantry)
 - [x] 5. Regenerate confirm
 - [x] 6. Retry failed day
-- [ ] 7. Date-range week label
-- [ ] 8. Cart progress
-- [ ] 9. Meal emoji
-- [ ] 10. Cook mode
+- [x] 7. Date-range week label
+- [x] 8. Cart progress
+- [x] 9. Meal emoji
+- [x] 10. Cook mode

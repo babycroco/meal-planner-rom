@@ -96,3 +96,10 @@ export async function regenerateMeal(day, slot, settings, existingNames, ctx = {
 export async function coachMessage(messages, settings, meals, pantry = []) {
   return await callApi("/api/coach", { messages, settings, meals, pantry });
 }
+
+// Cook mode (item 10): expand a finished meal into step-by-step instructions.
+// Returns { steps: string[], tips: string }.
+export async function cookRecipe(meal) {
+  const { steps, tips } = await callApi("/api/generate-meals", { mode: "recipe", meal });
+  return { steps: steps || [], tips: tips || "" };
+}

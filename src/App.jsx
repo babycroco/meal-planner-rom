@@ -23,7 +23,7 @@ import {
   Send,
 } from "lucide-react";
 import { load, save } from "./lib/storage";
-import { planWeek as apiPlanWeek, generateDay, regenerateMeal as apiRegenerateMeal, coachMessage as apiCoachMessage } from "./lib/api";
+import { planWeek as apiPlanWeek, generateDay, regenerateMeal as apiRegenerateMeal, coachMessage as apiCoachMessage, cookRecipe as apiCookRecipe } from "./lib/api";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const SLOTS = ["breakfast", "lunch", "dinner", "snack"];
@@ -108,6 +108,25 @@ const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ];
+const MONTH_ABBR = [
+  "JAN", "FEB", "MAR", "APR", "MAY", "JUN",
+  "JUL", "AUG", "SEP", "OCT", "NOV", "DEC",
+];
+
+// The week's date range as an uppercase label, e.g. "JUL 7 – 13" (same month)
+// or "JUN 30 – JUL 6" (month boundary). `start` → start+6, en dash. The week
+// is today-first, so `start` is the day the week was generated.
+function formatWeekRange(start) {
+  const s = new Date(start);
+  if (isNaN(s.getTime())) return null;
+  const e = new Date(s);
+  e.setDate(s.getDate() + 6);
+  const sM = MONTH_ABBR[s.getMonth()];
+  const eM = MONTH_ABBR[e.getMonth()];
+  return sM === eM
+    ? `${sM} ${s.getDate()} – ${e.getDate()}`
+    : `${sM} ${s.getDate()} – ${eM} ${e.getDate()}`;
+}
 
 // Build the seasonal context for "now": a friendly month label (e.g.
 // "early July"), the full in-season produce list for the chef, and a short
@@ -718,6 +737,7 @@ function MealTile({ slot, meal, isRegen, hero = false, onClick, onRegen }) {
       ) : meal ? (
         <>
           <div className={`font-medium leading-snug text-charcoal min-h-[2.5em] ${hero ? "text-[15px]" : "text-[13px]"}`}>
+            {meal.emoji && <span className="mr-1" aria-hidden>{meal.emoji}</span>}
             {meal.name}
           </div>
           <div className={`mt-1.5 flex items-center justify-between font-semibold text-charcoal/80 tnum ${hero ? "text-xs" : "text-[11px]"}`}>
@@ -1137,6 +1157,10 @@ export default function App() {
   const [failedDays, setFailedDays] = useState([]);
   const [retryingDays, setRetryingDays] = useState([]);
   const genContextRef = useRef(null);
+  // Shopping progress across the week (item 8): rows ticked into the pantry.
+  const [boughtCount, setBoughtCount] = useState(() => load("boughtCount_v1", 0));
+  // Cook mode (item 10): recipe request in flight for the open meal.
+  const [recipeLoading, setRecipeLoading] = useState(false);
 
   useEffect(() => { save("settings_v2", settings); }, [settings]);
   useEffect(() => { save("meals_v2", meals); }, [meals]);
@@ -1145,6 +1169,7 @@ export default function App() {
   useEffect(() => { save("mealHistory_v1", mealHistory); }, [mealHistory]);
   useEffect(() => { save("favorites_v1", favorites); }, [favorites]);
   useEffect(() => { save("pantry_v1", pantry); }, [pantry]);
+  useEffect(() => { save("boughtCount_v1", boughtCount); }, [boughtCount]);
 
   const toggleLoved = (name) => {
     if (!name) return;
@@ -1251,6 +1276,7 @@ export default function App() {
   const tickGroceryRow = (item, qty, unit, section) => {
     const prevPantry = pantry;
     addToPantry(item, qty, unit, section);
+    setBoughtCount((n) => n + 1);
     if (toastTimer.current) clearTimeout(toastTimer.current);
     setToast({ message: `${item} → pantry`, prevPantry });
     toastTimer.current = setTimeout(() => setToast(null), 5000);
@@ -1260,6 +1286,7 @@ export default function App() {
     if (!toast) return;
     if (toastTimer.current) clearTimeout(toastTimer.current);
     setPantry(toast.prevPantry);
+    setBoughtCount((n) => Math.max(0, n - 1));
     setToast(null);
   };
 
@@ -1283,6 +1310,9 @@ export default function App() {
   // Grocery list is derived from meals minus pantry — no separate state.
   const groceryCategories = useMemo(() => consolidateGrocery(meals, pantry), [meals, pantry]);
   const groceryItemCount = groceryCategories.reduce((n, c) => n + c.items.length, 0);
+  // Shopping progress (item 8): total = already-bought + still-to-buy.
+  const shoppingTotal = boughtCount + groceryItemCount;
+  const shoppingPct = shoppingTotal > 0 ? Math.round((boughtCount / shoppingTotal) * 100) : 100;
 
   // Pantry items grouped by section for display, sorted alphabetically.
   const pantryBySection = useMemo(() => {
@@ -1328,6 +1358,7 @@ export default function App() {
     setSelectedDay(null); // new week → hero returns to today
     setFailedDays([]);
     setRetryingDays([]);
+    setBoughtCount(0); // new week → shopping progress resets
     // Cross-week memory: what we ate recently (avoid), what's loved (may
     // return), what's banned (never).
     const memory = {
@@ -1430,6 +1461,7 @@ export default function App() {
         monthName: season.monthName,
         location: settings.location || "Germany",
         headline: season.headline,
+        weekStart: new Date().toISOString().slice(0, 10), // this week's own date range
       });
     } catch (e) {
       console.error(e);
@@ -1512,6 +1544,25 @@ export default function App() {
       setError(`Regeneration failed: ${friendlyError(e.message)}`);
     }
     setRegenKey(null);
+  };
+
+  // Cook mode (item 10): fetch full step-by-step instructions for a meal and
+  // cache them onto the meal object so reopening is free. Regenerating a meal
+  // replaces its object (dropping recipeSteps), so stale steps clear on their own.
+  const cookThis = async (key) => {
+    const meal = meals[key];
+    if (!meal || meal.recipeSteps?.length || recipeLoading) return;
+    setRecipeLoading(true);
+    setError(null);
+    try {
+      const { steps, tips } = await apiCookRecipe(meal);
+      if (!Array.isArray(steps) || steps.length === 0) throw new Error("Try again.");
+      setMeals((prev) => (prev[key] ? { ...prev, [key]: { ...prev[key], recipeSteps: steps, recipeTips: tips } } : prev));
+    } catch (e) {
+      console.error(e);
+      setError(`Couldn't load the recipe: ${friendlyError(e.message)}`);
+    }
+    setRecipeLoading(false);
   };
 
   const exportPayload = () => {
@@ -1641,7 +1692,13 @@ export default function App() {
         <main id="main-content" className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-10 pt-6 pb-28 lg:py-10">
           {/* ── Page heading ────────────────────────────────────── */}
           <header className="mb-8">
-            <Eyebrow>Week 01 · {activeProgram.name}</Eyebrow>
+            <Eyebrow>
+              {(() => {
+                const start = weekContext?.weekStart ? new Date(weekContext.weekStart) : new Date();
+                const range = formatWeekRange(start);
+                return range ? `${range} · ${activeProgram.name}` : activeProgram.name;
+              })()}
+            </Eyebrow>
             <h1 className="mt-1.5 text-3xl sm:text-4xl lg:text-[44px] font-semibold tracking-[-0.5px] text-ink leading-[1.1]">
               {viewTitle}
             </h1>
@@ -1822,6 +1879,24 @@ export default function App() {
                 </Button>
               )}
             </div>
+
+            {/* Shopping progress bar */}
+            {shoppingTotal > 0 && (
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-medium text-steel tnum">
+                    {boughtCount} of {shoppingTotal} bought
+                  </span>
+                  <span className="text-xs font-semibold text-primary tnum">{shoppingPct}%</span>
+                </div>
+                <div className="h-1.5 rounded-full bg-surface-soft overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-primary transition-[width] duration-500"
+                    style={{ width: `${shoppingPct}%` }}
+                  />
+                </div>
+              </div>
+            )}
 
             <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
               {groceryCategories.map(({ section, items }, si) => (
@@ -2161,6 +2236,7 @@ export default function App() {
                   {meals[activeMeal].prep_time && <TimeChip prep={meals[activeMeal].prep_time} />}
                 </div>
                 <h2 className="text-2xl sm:text-[28px] font-semibold leading-tight text-ink tracking-[-0.3px]">
+                  {meals[activeMeal].emoji && <span className="mr-1.5" aria-hidden>{meals[activeMeal].emoji}</span>}
                   {meals[activeMeal].name}
                 </h2>
               </div>
@@ -2196,6 +2272,45 @@ export default function App() {
             <div>
               <Eyebrow className="!text-charcoal">Method</Eyebrow>
               <p className="mt-2 text-[15px] leading-relaxed text-slate">{meals[activeMeal].instructions}</p>
+            </div>
+
+            {/* Cook mode (item 10) — full step-by-step recipe on demand, cached
+                onto the meal so reopening is instant. */}
+            <div className="mt-5">
+              {meals[activeMeal].recipeSteps?.length ? (
+                <div className="fade-in">
+                  <Eyebrow className="!text-charcoal">Cook mode</Eyebrow>
+                  <ol className="mt-3 space-y-3">
+                    {meals[activeMeal].recipeSteps.map((step, i) => (
+                      <li key={i} className="flex gap-3">
+                        <span className="shrink-0 w-7 h-7 rounded-full bg-primary text-white grid place-items-center text-sm font-semibold tnum">
+                          {i + 1}
+                        </span>
+                        <span className="text-[17px] leading-relaxed text-ink pt-0.5">{step}</span>
+                      </li>
+                    ))}
+                  </ol>
+                  {meals[activeMeal].recipeTips && (
+                    <div className="mt-4 p-3 rounded-md bg-surface-soft text-[15px] leading-relaxed text-slate">
+                      <span className="font-semibold text-charcoal">Tip · </span>
+                      {meals[activeMeal].recipeTips}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <Button
+                  variant="secondary"
+                  onClick={() => cookThis(activeMeal)}
+                  disabled={recipeLoading}
+                  className="w-full"
+                >
+                  {recipeLoading ? (
+                    <><Loader2 size={14} className="animate-spin" /> Writing the recipe…</>
+                  ) : (
+                    <><span aria-hidden>👨‍🍳</span> Cook this</>
+                  )}
+                </Button>
+              )}
             </div>
 
             {/* Feed the chef's memory: loved meals may return, banned never do. */}
