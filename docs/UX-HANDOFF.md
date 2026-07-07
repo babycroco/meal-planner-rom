@@ -206,9 +206,9 @@ batch, verify in preview between batches, ask Rom before each push.
 
 ## 6. Status
 
-- [ ] 1. Bottom tab bar
-- [ ] 2. Today hero (mobile)
-- [ ] 3. Dark mode
+- [x] 1. Bottom tab bar
+- [x] 2. Today hero (mobile)
+- [x] 3. Dark mode
 - [ ] 4. Undo toast (cart → pantry)
 - [ ] 5. Regenerate confirm
 - [ ] 6. Retry failed day

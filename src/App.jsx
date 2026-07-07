@@ -132,11 +132,13 @@ const TIME_LABELS = {
 };
 
 // Subtle color signal on prep-time chips — readable on pastel backgrounds.
+// Values are CSS vars so the dark-mode block can lighten them for the
+// darkened tiles (see index.css).
 const TIME_COLORS = {
-  "5": "#2B6E2E",   // green — no-cook
-  "15": "#8A6A1C",  // amber — moderate
-  "30": "#A85C1C",  // orange — slow
-  "60": "#A8442F",  // red-brown — long-cook
+  "5": "var(--time-5)",   // green — no-cook
+  "15": "var(--time-15)", // amber — moderate
+  "30": "var(--time-30)", // orange — slow
+  "60": "var(--time-60)", // red-brown — long-cook
 };
 
 // Ingredient section order on the consolidated grocery list. Matches the
@@ -694,16 +696,16 @@ function TimeChip({ prep }) {
   );
 }
 
-function MealTile({ slot, meal, isRegen, onClick, onRegen }) {
+function MealTile({ slot, meal, isRegen, hero = false, onClick, onRegen }) {
   return (
     <button
       onClick={meal ? onClick : undefined}
       disabled={!meal}
-      className="tile-lift group relative w-full text-left p-3 rounded-md border border-transparent disabled:cursor-default"
+      className={`tile-lift group relative w-full text-left rounded-md border border-transparent disabled:cursor-default ${hero ? "p-4" : "p-3"}`}
       style={{ background: SLOT_TINTS[slot] }}
     >
       <div className="flex items-center justify-between gap-2 mb-1.5">
-        <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-charcoal/70">
+        <span className={`font-semibold uppercase tracking-[0.1em] text-charcoal/70 ${hero ? "text-[11px]" : "text-[10px]"}`}>
           {SLOT_LABELS[slot]}
         </span>
         {meal?.prep_time && <TimeChip prep={meal.prep_time} />}
@@ -715,10 +717,10 @@ function MealTile({ slot, meal, isRegen, onClick, onRegen }) {
         </div>
       ) : meal ? (
         <>
-          <div className="text-[13px] font-medium leading-snug text-charcoal min-h-[2.5em]">
+          <div className={`font-medium leading-snug text-charcoal min-h-[2.5em] ${hero ? "text-[15px]" : "text-[13px]"}`}>
             {meal.name}
           </div>
-          <div className="mt-1.5 flex items-center justify-between text-[11px] font-semibold text-charcoal/80 tnum">
+          <div className={`mt-1.5 flex items-center justify-between font-semibold text-charcoal/80 tnum ${hero ? "text-xs" : "text-[11px]"}`}>
             <span className="inline-flex items-center gap-1">
               <Flame size={10} />{meal.kcal} kcal
             </span>
@@ -746,15 +748,15 @@ function MealTile({ slot, meal, isRegen, onClick, onRegen }) {
   );
 }
 
-function DayCard({ dayIndex, day, isToday, kcal, protein, carbs, fat, meals, regenKey, onOpenMeal, onRegen }) {
+function DayCard({ dayIndex, day, isToday, kcal, protein, carbs, fat, meals, regenKey, hero = false, onOpenMeal, onRegen }) {
   return (
     <article
-      className="bg-canvas rounded-lg border border-hairline p-4 flex flex-col gap-3 hover:shadow-s2 pop-in card-lift"
+      className={`bg-canvas rounded-lg border border-hairline flex flex-col gap-3 hover:shadow-s2 pop-in card-lift ${hero ? "p-5" : "p-4"}`}
       style={{ animationDelay: `${dayIndex * 60}ms` }}
     >
       <header className="flex items-baseline justify-between gap-2 pb-2.5 border-b border-hairline-soft">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-lg font-semibold text-ink tracking-[-0.2px]">{day}</span>
+          <span className={`font-semibold text-ink tracking-[-0.2px] ${hero ? "text-xl" : "text-lg"}`}>{day}</span>
           {isToday && (
             <span className="pulse-today px-2 py-0.5 rounded-full bg-primary text-white text-[10px] font-semibold uppercase tracking-[0.08em] leading-none">
               Today
@@ -768,7 +770,7 @@ function DayCard({ dayIndex, day, isToday, kcal, protein, carbs, fat, meals, reg
         </div>
       </header>
 
-      <div className="flex flex-col gap-2">
+      <div className={`grid gap-2 ${hero ? "grid-cols-2" : "grid-cols-1"}`}>
         {SLOTS.map((slot) => {
           const k = `${day}-${slot}`;
           return (
@@ -777,6 +779,7 @@ function DayCard({ dayIndex, day, isToday, kcal, protein, carbs, fat, meals, reg
               slot={slot}
               meal={meals[k]}
               isRegen={regenKey === k}
+              hero={hero}
               onClick={() => onOpenMeal(k)}
               onRegen={meals[k] ? () => onRegen(k) : null}
             />
@@ -982,6 +985,79 @@ function ComingSoon({ icon: Icon, title, description }) {
   );
 }
 
+// The four top-level views, in tab order for the mobile bottom bar.
+const TABS = [
+  { id: "plan", label: "This week", icon: Calendar },
+  { id: "grocery", label: "Cart", icon: ShoppingCart },
+  { id: "pantry", label: "Pantry", icon: Package },
+  { id: "coach", label: "Coach", icon: MessageCircle },
+];
+
+// Fixed bottom tab bar — mobile only (desktop uses the sidebar). One thumb-tap
+// per top-level view. Sits above the iPhone home indicator via safe-area inset.
+// Programs + Settings/Transfer stay behind the hamburger drawer.
+function BottomTabBar({ view, setView }) {
+  return (
+    <nav
+      aria-label="Views"
+      className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-canvas/95 backdrop-blur border-t border-hairline flex"
+      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+    >
+      {TABS.map(({ id, label, icon: Icon }) => {
+        const active = view === id;
+        return (
+          <button
+            key={id}
+            onClick={() => setView(id)}
+            aria-current={active ? "page" : undefined}
+            aria-label={label}
+            className={`btn-spring flex-1 flex flex-col items-center justify-center gap-0.5 pt-2 pb-1.5 min-h-[54px] text-[10px] font-semibold tracking-[0.02em] transition-colors ${active ? "text-primary" : "text-stone hover:text-charcoal"}`}
+          >
+            <Icon size={21} strokeWidth={active ? 2.5 : 2} />
+            {label}
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+
+// Horizontal day switcher for the mobile Plan view — today-first, scrollable.
+// Pills show a dot for today and a spinner for days still cooking.
+function DayPills({ days, today, selected, onSelect, meals, loading }) {
+  return (
+    <div className="lg:hidden flex gap-1.5 overflow-x-auto no-scrollbar -mx-4 px-4 pb-1">
+      {days.map((d) => {
+        const active = d === selected;
+        const isToday = d === today;
+        const ready = SLOTS.some((s) => meals[`${d}-${s}`]);
+        return (
+          <button
+            key={d}
+            onClick={() => onSelect(d)}
+            aria-current={active ? "true" : undefined}
+            className={`shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-sm font-semibold border transition-colors ${
+              active
+                ? "bg-primary text-white border-transparent"
+                : "bg-canvas text-charcoal border-hairline-strong hover:bg-surface-soft"
+            }`}
+          >
+            {d}
+            {loading && !ready ? (
+              <Loader2 size={11} className="animate-spin" />
+            ) : isToday ? (
+              <span
+                className="w-1.5 h-1.5 rounded-full"
+                style={{ background: active ? "#fff" : "var(--primary)" }}
+              />
+            ) : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Main app ──────────────────────────────────────────────────────────
 
 export default function App() {
@@ -1006,6 +1082,8 @@ export default function App() {
   const [coachInput, setCoachInput] = useState("");
   const [coachLoading, setCoachLoading] = useState(false);
   const [view, setView] = useState("plan");
+  // Mobile Plan view: which day the hero card shows. null → today.
+  const [selectedDay, setSelectedDay] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -1164,6 +1242,8 @@ export default function App() {
   const todayIdx = (new Date().getDay() + 6) % 7;
   const todayName = DAYS[todayIdx];
   const orderedDays = [...DAYS.slice(todayIdx), ...DAYS.slice(0, todayIdx)];
+  // Mobile Plan view shows one day at a time; defaults to today.
+  const activeDay = selectedDay || todayName;
 
   const generateWeek = async () => {
     setLoading(true);
@@ -1182,6 +1262,7 @@ export default function App() {
     const prevMeals = meals;
     setMeals({});
     setWeekPlan(null);
+    setSelectedDay(null); // new week → hero returns to today
     // Cross-week memory: what we ate recently (avoid), what's loved (may
     // return), what's banned (never).
     const memory = {
@@ -1431,7 +1512,7 @@ export default function App() {
           </button>
         </header>
 
-        <main id="main-content" className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-10 py-6 lg:py-10">
+        <main id="main-content" className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-10 pt-6 pb-28 lg:py-10">
           {/* ── Page heading ────────────────────────────────────── */}
           <header className="mb-8">
             <Eyebrow>Week 01 · {activeProgram.name}</Eyebrow>
@@ -1519,39 +1600,81 @@ export default function App() {
         {/* ── Plan view: 7 day cards, today first. While generating,
                days that haven't landed yet show their blueprint concept. */}
         {view === "plan" && (hasMeals || (loading && weekPlan)) && (
-          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
-            {orderedDays.map((day, di) => {
-              const dayHasMeals = SLOTS.some((s) => meals[`${day}-${s}`]);
-              if (!dayHasMeals && loading) {
+          <>
+            {/* Desktop (lg+): full 7-column grid, unchanged. */}
+            <div className="hidden lg:grid gap-3 lg:grid-cols-4 xl:grid-cols-7">
+              {orderedDays.map((day, di) => {
+                const dayHasMeals = SLOTS.some((s) => meals[`${day}-${s}`]);
+                if (!dayHasMeals && loading) {
+                  return (
+                    <PendingDayCard
+                      key={day}
+                      day={day}
+                      dayIndex={di}
+                      isToday={day === todayName}
+                      plan={weekPlan?.[day]}
+                    />
+                  );
+                }
+                if (!dayHasMeals) return null;
                 return (
-                  <PendingDayCard
+                  <DayCard
                     key={day}
-                    day={day}
                     dayIndex={di}
+                    day={day}
                     isToday={day === todayName}
-                    plan={weekPlan?.[day]}
+                    kcal={dayKcal(day)}
+                    protein={dayProtein(day)}
+                    carbs={dayCarbs(day)}
+                    fat={dayFat(day)}
+                    meals={meals}
+                    regenKey={regenKey}
+                    onOpenMeal={setActiveMeal}
+                    onRegen={regenerateMeal}
                   />
                 );
-              }
-              if (!dayHasMeals) return null;
-              return (
-                <DayCard
-                  key={day}
-                  dayIndex={di}
-                  day={day}
-                  isToday={day === todayName}
-                  kcal={dayKcal(day)}
-                  protein={dayProtein(day)}
-                  carbs={dayCarbs(day)}
-                  fat={dayFat(day)}
-                  meals={meals}
-                  regenKey={regenKey}
-                  onOpenMeal={setActiveMeal}
-                  onRegen={regenerateMeal}
-                />
-              );
-            })}
-          </div>
+              })}
+            </div>
+
+            {/* Mobile / tablet (< lg): today-first hero + day switcher. */}
+            <div className="lg:hidden">
+              <DayPills
+                days={orderedDays}
+                today={todayName}
+                selected={activeDay}
+                onSelect={setSelectedDay}
+                meals={meals}
+                loading={loading}
+              />
+              <div className="mt-4">
+                {SLOTS.some((s) => meals[`${activeDay}-${s}`]) ? (
+                  <DayCard
+                    key={activeDay}
+                    dayIndex={0}
+                    day={activeDay}
+                    isToday={activeDay === todayName}
+                    kcal={dayKcal(activeDay)}
+                    protein={dayProtein(activeDay)}
+                    carbs={dayCarbs(activeDay)}
+                    fat={dayFat(activeDay)}
+                    meals={meals}
+                    regenKey={regenKey}
+                    hero
+                    onOpenMeal={setActiveMeal}
+                    onRegen={regenerateMeal}
+                  />
+                ) : loading ? (
+                  <PendingDayCard
+                    key={activeDay}
+                    day={activeDay}
+                    dayIndex={0}
+                    isToday={activeDay === todayName}
+                    plan={weekPlan?.[activeDay]}
+                  />
+                ) : null}
+              </div>
+            </div>
+          </>
         )}
 
         {/* ── Grocery view: consolidated by section ────────────── */}
@@ -1833,7 +1956,7 @@ export default function App() {
             )}
 
             {/* Input — always at the bottom, sticky-feel */}
-            <div className="bg-canvas border border-hairline rounded-lg p-3 sticky bottom-4 shadow-s1 focus-within:border-primary transition-colors">
+            <div className="bg-canvas border border-hairline rounded-lg p-3 sticky bottom-[calc(66px_+_env(safe-area-inset-bottom))] lg:bottom-4 shadow-s1 focus-within:border-primary transition-colors">
               <form
                 onSubmit={(e) => { e.preventDefault(); sendCoachMessage(coachInput); }}
                 className="flex items-center gap-2"
@@ -1860,6 +1983,8 @@ export default function App() {
         )}
         </main>
       </div>
+
+      <BottomTabBar view={view} setView={setView} />
 
       {/* ── Active meal modal ──────────────────────────────────── */}
       <Modal open={!!activeMeal && !!meals[activeMeal]} onClose={() => setActiveMeal(null)} maxWidth="max-w-2xl">

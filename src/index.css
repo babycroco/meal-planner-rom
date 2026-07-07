@@ -75,8 +75,84 @@
   /* Scrim */
   --scrim: rgba(15, 15, 15, 0.45);
 
+  /* Prep-time chip colors — readable on the pastel tiles. Held as vars so the
+     dark-mode block can lighten them for the darkened tiles. */
+  --time-5: #2B6E2E;   /* green — no-cook */
+  --time-15: #8A6A1C;  /* amber — moderate */
+  --time-30: #A85C1C;  /* orange — slow */
+  --time-60: #A8442F;  /* red-brown — long-cook */
+
   /* Type */
   --font-sans: "Inter", "Notion Sans", -apple-system, system-ui, "Segoe UI", Helvetica, sans-serif;
+}
+
+/* ── Dark mode (auto) ──────────────────────────────────────────────────
+   Follows the OS appearance. Remaps the tokens above to a warm dark
+   palette — never pure black — keeping the four meal-slot hues intact but
+   darkened, with light ink flipped in via --charcoal (its light-surface
+   text role inverts cleanly since every surface is now dark). Brand text
+   colors that sit on tint badges are lightened for AA contrast. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Surface — warm darks */
+    --canvas: #1B1B1A;
+    --surface: #212120;
+    --surface-soft: #2A2926;
+    --hairline: #302F2C;
+    --hairline-soft: #292826;
+    --hairline-strong: #403E3A;
+
+    /* Text — light ink on warm dark. --charcoal flips to a light tone so
+       tile labels + nav items (its two roles) stay legible on dark. */
+    --ink: #ECEBE7;
+    --charcoal: #E4E2DC;
+    --slate: #C6C4BD;
+    --steel: #ADABA3;   /* ~6:1 on --canvas */
+    --stone: #928F88;   /* ~4.6:1 on --canvas */
+    --muted: #5F5E58;
+
+    /* Meal-slot tints — same hues, dropped to ~20-25% lightness. Light
+       --charcoal text on these clears 4.5:1 comfortably. */
+    --tint-lavender: #343048;  /* breakfast */
+    --tint-peach: #46372A;     /* lunch */
+    --tint-mint: #2E3F2C;      /* dinner */
+    --tint-yellow: #46402A;    /* snack */
+    --tint-gray: #2A2926;
+
+    /* Brand accents used as text on tint badges — lightened for contrast. */
+    --brand-green: #74BE79;
+    --brand-purple-800: #C3B5EE;
+
+    /* Semantic */
+    --success: #74BE79;
+    --warning: #E8B04A;
+    --error: #F08A8F;
+    --error-tint: #3C2523;
+
+    /* Prep-time chips — lightened to read on the darkened tiles. */
+    --time-5: #7FC886;
+    --time-15: #D6B45A;
+    --time-30: #E0955A;
+    --time-60: #E08268;
+
+    /* Elevation — deeper so lifts read against dark surfaces. */
+    --shadow-1: rgba(0, 0, 0, 0.30) 0 1px 2px 0;
+    --shadow-2: rgba(0, 0, 0, 0.45) 0 4px 12px 0;
+    --shadow-3: rgba(0, 0, 0, 0.60) 0 24px 48px -8px;
+    --shadow-4: rgba(0, 0, 0, 0.55) 0 16px 48px -8px;
+
+    /* Scrim */
+    --scrim: rgba(0, 0, 0, 0.66);
+  }
+}
+
+/* Hide the horizontal scrollbar on the mobile day-pill switcher. */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
 /* Keyboard-only focus ring — applies to :focus-visible (keyboard / assistive
