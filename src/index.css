@@ -86,16 +86,18 @@
   --font-sans: "Inter", "Notion Sans", -apple-system, system-ui, "Segoe UI", Helvetica, sans-serif;
 }
 
-/* ── Dark mode (auto) ──────────────────────────────────────────────────
-   Follows the OS appearance. Remaps the tokens above to a warm dark
-   palette — never pure black — keeping the four meal-slot hues intact but
-   darkened, with light ink flipped in via --charcoal (its light-surface
-   text role inverts cleanly since every surface is now dark). Brand text
-   colors that sit on tint badges are lightened for AA contrast. */
-@media (prefers-color-scheme: dark) {
-  :root {
-    /* Surface — warm darks */
-    --canvas: #1B1B1A;
+/* ── Dark mode ─────────────────────────────────────────────────────────
+   Applied when data-theme="dark" is set on <html>. App.jsx resolves the
+   user's choice (System / Light / Dark) and an inline script in index.html
+   sets the attribute before first paint, so "System" still tracks the OS
+   with no flash. Remaps the tokens above to a warm dark palette — never
+   pure black — keeping the four meal-slot hues intact but darkened, with
+   light ink flipped in via --charcoal (its light-surface text role inverts
+   cleanly since every surface is now dark). Brand text colors that sit on
+   tint badges are lightened for AA contrast. */
+:root[data-theme="dark"] {
+  /* Surface — warm darks */
+  --canvas: #1B1B1A;
     --surface: #212120;
     --surface-soft: #2A2926;
     --hairline: #302F2C;
@@ -143,7 +145,6 @@
 
     /* Scrim */
     --scrim: rgba(0, 0, 0, 0.66);
-  }
 }
 
 /* Hide the horizontal scrollbar on the mobile day-pill switcher. */

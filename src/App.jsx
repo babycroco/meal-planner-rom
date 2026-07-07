@@ -1135,6 +1135,8 @@ export default function App() {
   const [view, setView] = useState("plan");
   // Mobile Plan view: which day the hero card shows. null → today.
   const [selectedDay, setSelectedDay] = useState(null);
+  // Appearance: "system" (follow OS) | "light" | "dark".
+  const [theme, setTheme] = useState(() => load("theme_v1", "system"));
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -1170,6 +1172,23 @@ export default function App() {
   useEffect(() => { save("favorites_v1", favorites); }, [favorites]);
   useEffect(() => { save("pantry_v1", pantry); }, [pantry]);
   useEffect(() => { save("boughtCount_v1", boughtCount); }, [boughtCount]);
+
+  // Appearance: resolve theme → data-theme on <html> + theme-color meta.
+  // "system" tracks the OS live (matchMedia listener); light/dark force it.
+  useEffect(() => {
+    save("theme_v1", theme);
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const apply = () => {
+      const dark = theme === "dark" || (theme === "system" && mq.matches);
+      document.documentElement.dataset.theme = dark ? "dark" : "light";
+      document.getElementById("theme-color-meta")?.setAttribute("content", dark ? "#1B1B1A" : "#FFFFFF");
+    };
+    apply();
+    if (theme === "system") {
+      mq.addEventListener("change", apply);
+      return () => mq.removeEventListener("change", apply);
+    }
+  }, [theme]);
 
   const toggleLoved = (name) => {
     if (!name) return;
@@ -2428,6 +2447,27 @@ export default function App() {
       <Modal open={showSettings} onClose={() => setShowSettings(false)} maxWidth="max-w-md">
         <ModalHeader title="Settings" onClose={() => setShowSettings(false)} />
         <div className="p-6 pt-5 space-y-6">
+          <div>
+            <Eyebrow className="!text-charcoal mb-3">Appearance</Eyebrow>
+            <div className="inline-flex w-full p-1 rounded-md bg-surface-soft">
+              {[
+                { id: "system", label: "System" },
+                { id: "light", label: "Light" },
+                { id: "dark", label: "Dark" },
+              ].map((opt) => (
+                <button
+                  key={opt.id}
+                  onClick={() => setTheme(opt.id)}
+                  aria-pressed={theme === opt.id}
+                  className={`flex-1 px-3 py-2 text-sm font-medium rounded-sm transition-colors ${theme === opt.id ? "bg-canvas shadow-s1 text-ink" : "text-steel hover:text-ink"}`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <div className="mt-1.5 text-[11px] text-stone">System follows your device's light/dark setting.</div>
+          </div>
+
           <div>
             <Eyebrow className="!text-charcoal mb-3">Daily targets</Eyebrow>
             <div className="grid grid-cols-2 gap-3">

@@ -216,3 +216,4 @@ batch, verify in preview between batches, ask Rom before each push.
 - [x] 8. Cart progress
 - [x] 9. Meal emoji
 - [x] 10. Cook mode
+- [x] +. Dark-mode toggle (Settings → Appearance: System / Light / Dark) — added on request; "System" keeps the auto behavior from item 3.
