@@ -21,6 +21,8 @@ import {
   MessageCircle,
   Menu as MenuIcon,
   Send,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { load, save } from "./lib/storage";
 import { planWeek as apiPlanWeek, generateDay, regenerateMeal as apiRegenerateMeal, coachMessage as apiCoachMessage, cookRecipe as apiCookRecipe } from "./lib/api";
@@ -957,7 +959,7 @@ function SidebarItem({ icon: Icon, label, subtitle, active, onClick, dotColor })
 function Sidebar({
   view, setView, activeProgramId, switchProgram,
   onSettings, onSync, onGenerate, hasMeals, loading,
-  sidebarOpen, onCloseSidebar,
+  sidebarOpen, onCloseSidebar, resolvedTheme, onToggleTheme,
 }) {
   return (
     <>
@@ -1007,6 +1009,12 @@ function Sidebar({
         <div className="border-t border-hairline p-3 flex items-center gap-1">
           <IconButton label="Settings" onClick={onSettings}><SettingsIcon size={18} /></IconButton>
           <IconButton label="Transfer" onClick={onSync}><Share2 size={18} /></IconButton>
+          <IconButton
+            label={resolvedTheme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            onClick={onToggleTheme}
+          >
+            {resolvedTheme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+          </IconButton>
           <button
             onClick={onGenerate}
             disabled={loading}
@@ -1137,6 +1145,11 @@ export default function App() {
   const [selectedDay, setSelectedDay] = useState(null);
   // Appearance: "system" (follow OS) | "light" | "dark".
   const [theme, setTheme] = useState(() => load("theme_v1", "system"));
+  // The resolved light/dark (drives the quick-toggle icon). Seeded from the
+  // attribute the inline index.html script set before first paint.
+  const [resolvedTheme, setResolvedTheme] = useState(
+    () => (typeof document !== "undefined" && document.documentElement.dataset.theme) || "light",
+  );
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -1182,6 +1195,7 @@ export default function App() {
       const dark = theme === "dark" || (theme === "system" && mq.matches);
       document.documentElement.dataset.theme = dark ? "dark" : "light";
       document.getElementById("theme-color-meta")?.setAttribute("content", dark ? "#1B1B1A" : "#FFFFFF");
+      setResolvedTheme(dark ? "dark" : "light");
     };
     apply();
     if (theme === "system") {
@@ -1325,6 +1339,10 @@ export default function App() {
   };
 
   const activeProgram = PROGRAM_BY_ID[activeProgramId] || PROGRAMS[0];
+
+  // Quick one-tap dark/light flip. Sets an explicit choice (opposite of what's
+  // currently showing); the Settings → Appearance control still offers "System".
+  const toggleTheme = () => setTheme(resolvedTheme === "dark" ? "light" : "dark");
 
   // Grocery list is derived from meals minus pantry — no separate state.
   const groceryCategories = useMemo(() => consolidateGrocery(meals, pantry), [meals, pantry]);
@@ -1682,6 +1700,8 @@ export default function App() {
         loading={loading}
         sidebarOpen={sidebarOpen}
         onCloseSidebar={() => setSidebarOpen(false)}
+        resolvedTheme={resolvedTheme}
+        onToggleTheme={toggleTheme}
       />
 
       <div className="lg:pl-60">
@@ -1698,14 +1718,23 @@ export default function App() {
             <span className="w-6 h-6 rounded-sm bg-ink-deep text-white grid place-items-center text-xs font-bold">M</span>
             <span>Meals</span>
           </div>
-          <button
-            onClick={requestGenerate}
-            disabled={loading}
-            aria-label={hasMeals ? "Regenerate week" : "Generate week"}
-            className={`btn-spring inline-flex items-center justify-center w-9 h-9 rounded-md bg-primary text-white disabled:opacity-50 ${loading ? "generating" : ""}`}
-          >
-            {loading ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={toggleTheme}
+              aria-label={resolvedTheme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+              className="btn-spring inline-flex items-center justify-center w-9 h-9 rounded-md text-charcoal hover:bg-surface-soft"
+            >
+              {resolvedTheme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+            <button
+              onClick={requestGenerate}
+              disabled={loading}
+              aria-label={hasMeals ? "Regenerate week" : "Generate week"}
+              className={`btn-spring inline-flex items-center justify-center w-9 h-9 rounded-md bg-primary text-white disabled:opacity-50 ${loading ? "generating" : ""}`}
+            >
+              {loading ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+            </button>
+          </div>
         </header>
 
         <main id="main-content" className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-10 pt-6 pb-28 lg:py-10">
