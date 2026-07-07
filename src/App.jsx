@@ -792,13 +792,15 @@ function DayCard({ dayIndex, day, isToday, kcal, protein, carbs, fat, meals, reg
 
 // Placeholder card shown while a day is still cooking during parallel
 // generation — surfaces the blueprint's concept so the wait is a menu
-// preview, not dead time.
-function PendingDayCard({ day, dayIndex, isToday, plan }) {
+// preview, not dead time. Doubles as the error variant: if a day's cook
+// failed (`failed`), it shows a "Couldn't cook this day" message + Retry
+// instead of vanishing silently.
+function PendingDayCard({ day, dayIndex, isToday, plan, failed = false, retrying = false, onRetry }) {
   return (
     <article
       className="bg-canvas rounded-lg border border-dashed border-hairline-strong p-4 flex flex-col gap-3 pop-in"
       style={{ animationDelay: `${dayIndex * 60}ms` }}
-      aria-label={`${day} — cooking`}
+      aria-label={failed ? `${day} — failed to generate` : `${day} — cooking`}
     >
       <header className="flex items-baseline justify-between gap-2 pb-2.5 border-b border-hairline-soft">
         <div className="flex items-center gap-2 flex-wrap">
@@ -809,10 +811,39 @@ function PendingDayCard({ day, dayIndex, isToday, plan }) {
             </span>
           )}
         </div>
-        <Loader2 size={14} className="animate-spin text-primary shrink-0" />
+        {failed && !retrying ? (
+          <AlertCircle size={15} className="text-error shrink-0" />
+        ) : (
+          <Loader2 size={14} className="animate-spin text-primary shrink-0" />
+        )}
       </header>
 
-      {plan?.concept ? (
+      {failed && !retrying ? (
+        <div className="flex flex-col gap-3 py-1">
+          {plan?.concept && (
+            <p className="text-[13px] leading-snug text-stone italic">{plan.concept}</p>
+          )}
+          <div className="flex items-center gap-1.5 text-[13px] font-medium text-error">
+            <AlertCircle size={14} className="shrink-0" /> Couldn't cook this day.
+          </div>
+          <button
+            onClick={onRetry}
+            className="btn-spring self-start inline-flex items-center gap-1.5 px-3.5 py-2 rounded-md bg-primary text-white text-sm font-medium hover:bg-primary-pressed transition-colors"
+          >
+            <RefreshCw size={13} /> Retry
+          </button>
+        </div>
+      ) : retrying ? (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-1.5 text-[11px] text-stone">
+            <span className="shimmer-dot" />
+            cooking…
+          </div>
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="h-16 rounded-md shimmer-block" />
+          ))}
+        </div>
+      ) : plan?.concept ? (
         <div className="flex flex-col gap-2.5">
           <div className="p-3 rounded-md bg-surface-soft">
             <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-stone mb-1">
@@ -1095,6 +1126,17 @@ export default function App() {
   const [importText, setImportText] = useState("");
   const [copyOk, setCopyOk] = useState(false);
   const [listCopied, setListCopied] = useState(false);
+  // Undo toast for cart tick → pantry (item 4). Holds the pre-add pantry
+  // snapshot so Undo restores it exactly.
+  const [toast, setToast] = useState(null);
+  const toastTimer = useRef(null);
+  // Regenerate confirmation (item 5).
+  const [confirmRegen, setConfirmRegen] = useState(false);
+  // Failed-day retry (item 6). genContextRef holds the last generation's
+  // context so a single failed day can be re-cooked in isolation.
+  const [failedDays, setFailedDays] = useState([]);
+  const [retryingDays, setRetryingDays] = useState([]);
+  const genContextRef = useRef(null);
 
   useEffect(() => { save("settings_v2", settings); }, [settings]);
   useEffect(() => { save("meals_v2", meals); }, [meals]);
@@ -1202,6 +1244,27 @@ export default function App() {
     setPantry((prev) => prev.filter((p) => p.id !== id));
   };
 
+  // Tick a grocery row → move it into the pantry, with a 5s Undo toast.
+  // We snapshot the pre-add pantry (simplest correct undo given the merge
+  // logic) so Undo restores it exactly. A new tick commits the pending one
+  // by replacing the toast.
+  const tickGroceryRow = (item, qty, unit, section) => {
+    const prevPantry = pantry;
+    addToPantry(item, qty, unit, section);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast({ message: `${item} → pantry`, prevPantry });
+    toastTimer.current = setTimeout(() => setToast(null), 5000);
+  };
+
+  const undoTick = () => {
+    if (!toast) return;
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setPantry(toast.prevPantry);
+    setToast(null);
+  };
+
+  useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
+
   const switchProgram = (id) => {
     const p = PROGRAM_BY_ID[id];
     if (!p) return;
@@ -1263,6 +1326,8 @@ export default function App() {
     setMeals({});
     setWeekPlan(null);
     setSelectedDay(null); // new week → hero returns to today
+    setFailedDays([]);
+    setRetryingDays([]);
     // Cross-week memory: what we ate recently (avoid), what's loved (may
     // return), what's banned (never).
     const memory = {
@@ -1301,6 +1366,17 @@ export default function App() {
         Sun: settings.maxLongCookPerWeek >= 2,
       };
 
+      // Stash everything a single-day retry (item 6) needs to re-cook a
+      // failed day in isolation with the same context.
+      genContextRef.current = {
+        ctx,
+        planByDay,
+        palette,
+        allowLongCookByDay,
+        settings,
+        banned: memory.banned,
+      };
+
       // Phase 2 — cook all 7 days in PARALLEL. Each day sees the palette
       // (exact names+units) and the other days' concepts, so the week stays
       // coherent without sequential threading. Grid fills as days land.
@@ -1333,10 +1409,11 @@ export default function App() {
         }),
       );
 
-      const failedDays = DAYS.filter((_, i) => results[i].status === "rejected");
-      if (failedDays.length > 0 && failedDays.length < DAYS.length) {
-        setError(`${failedDays.join(", ")} didn't generate — hit Regenerate to fill the gaps.`);
-      } else if (failedDays.length === DAYS.length) {
+      const failed = DAYS.filter((_, i) => results[i].status === "rejected");
+      setFailedDays(failed);
+      if (failed.length > 0 && failed.length < DAYS.length) {
+        setError(`${failed.join(", ")} didn't generate — tap Retry on those days below.`);
+      } else if (failed.length === DAYS.length) {
         throw new Error(results[0].reason?.message || "Generation failed. Try again.");
       }
 
@@ -1363,6 +1440,55 @@ export default function App() {
     }
     setWeekPlan(null);
     setLoading(false);
+  };
+
+  // Regenerate confirmation (item 5): first-ever generation is instant; once a
+  // week exists, a mis-tap on Regenerate must be caught before it's destroyed.
+  const requestGenerate = () => {
+    setSidebarOpen(false);
+    if (hasMeals) setConfirmRegen(true);
+    else generateWeek();
+  };
+  const confirmRegenerate = () => {
+    setConfirmRegen(false);
+    generateWeek();
+  };
+
+  // Retry one failed day (item 6) using the stored generation context, so
+  // the other six days are left untouched.
+  const retryDay = async (day) => {
+    const gc = genContextRef.current;
+    if (!gc || retryingDays.includes(day)) return;
+    setRetryingDays((prev) => [...prev, day]);
+    setError(null);
+    try {
+      const otherDaysSummary = DAYS.filter((d) => d !== day)
+        .map((d) => (gc.planByDay[d]?.concept ? `${d}: ${gc.planByDay[d].concept}` : null))
+        .filter(Boolean)
+        .join(" | ");
+      const dayMeals = await generateDay(day, gc.settings, gc.allowLongCookByDay[day] || false, [], [], {
+        ...gc.ctx,
+        concept: gc.planByDay[day]?.concept || "",
+        breakfastIdea: gc.planByDay[day]?.breakfastIdea || "",
+        snackIdea: gc.planByDay[day]?.snackIdea || "",
+        palette: gc.palette,
+        otherDaysSummary,
+        bannedMeals: gc.banned,
+      });
+      if (!Array.isArray(dayMeals) || dayMeals.length !== 4) {
+        throw new Error("Try again.");
+      }
+      setMeals((prev) => {
+        const next = { ...prev };
+        SLOTS.forEach((slot, i) => { next[`${day}-${slot}`] = dayMeals[i]; });
+        return next;
+      });
+      setFailedDays((prev) => prev.filter((d) => d !== day));
+    } catch (e) {
+      console.error(e);
+      setError(`${day} didn't generate — ${friendlyError(e.message)}`);
+    }
+    setRetryingDays((prev) => prev.filter((d) => d !== day));
   };
 
   const regenerateMeal = async (key) => {
@@ -1481,7 +1607,7 @@ export default function App() {
         switchProgram={switchProgram}
         onSettings={() => { setShowSettings(true); setSidebarOpen(false); }}
         onSync={() => { setTransferMode(hasMeals ? "export" : "import"); setTransferOpen(true); setSidebarOpen(false); }}
-        onGenerate={() => { generateWeek(); setSidebarOpen(false); }}
+        onGenerate={requestGenerate}
         hasMeals={hasMeals}
         loading={loading}
         sidebarOpen={sidebarOpen}
@@ -1503,9 +1629,9 @@ export default function App() {
             <span>Meals</span>
           </div>
           <button
-            onClick={generateWeek}
+            onClick={requestGenerate}
             disabled={loading}
-            aria-label="Regenerate"
+            aria-label={hasMeals ? "Regenerate week" : "Generate week"}
             className={`btn-spring inline-flex items-center justify-center w-9 h-9 rounded-md bg-primary text-white disabled:opacity-50 ${loading ? "generating" : ""}`}
           >
             {loading ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
@@ -1605,14 +1731,17 @@ export default function App() {
             <div className="hidden lg:grid gap-3 lg:grid-cols-4 xl:grid-cols-7">
               {orderedDays.map((day, di) => {
                 const dayHasMeals = SLOTS.some((s) => meals[`${day}-${s}`]);
-                if (!dayHasMeals && loading) {
+                if (!dayHasMeals && (loading || failedDays.includes(day))) {
                   return (
                     <PendingDayCard
                       key={day}
                       day={day}
                       dayIndex={di}
                       isToday={day === todayName}
-                      plan={weekPlan?.[day]}
+                      plan={weekPlan?.[day] || genContextRef.current?.planByDay?.[day]}
+                      failed={!loading && failedDays.includes(day)}
+                      retrying={retryingDays.includes(day)}
+                      onRetry={() => retryDay(day)}
                     />
                   );
                 }
@@ -1663,13 +1792,16 @@ export default function App() {
                     onOpenMeal={setActiveMeal}
                     onRegen={regenerateMeal}
                   />
-                ) : loading ? (
+                ) : loading || failedDays.includes(activeDay) ? (
                   <PendingDayCard
                     key={activeDay}
                     day={activeDay}
                     dayIndex={0}
                     isToday={activeDay === todayName}
-                    plan={weekPlan?.[activeDay]}
+                    plan={weekPlan?.[activeDay] || genContextRef.current?.planByDay?.[activeDay]}
+                    failed={!loading && failedDays.includes(activeDay)}
+                    retrying={retryingDays.includes(activeDay)}
+                    onRetry={() => retryDay(activeDay)}
                   />
                 ) : null}
               </div>
@@ -1708,7 +1840,7 @@ export default function App() {
                     {items.map((ing) => (
                       <li key={ing.key}>
                         <button
-                          onClick={() => addToPantry(ing.item, ing.qty, ing.unit, ing.section || section)}
+                          onClick={() => tickGroceryRow(ing.item, ing.qty, ing.unit, ing.section || section)}
                           title="Mark as bought — adds to pantry"
                           className="group w-full flex items-center gap-3 py-1.5 px-1 text-left rounded-sm hover:bg-surface-soft transition-colors"
                         >
@@ -1985,6 +2117,38 @@ export default function App() {
       </div>
 
       <BottomTabBar view={view} setView={setView} />
+
+      {/* ── Undo toast (cart → pantry) — floats above the mobile tab bar ── */}
+      {toast && (
+        <div
+          className="fixed inset-x-0 z-40 flex justify-center px-4 pointer-events-none bottom-[calc(env(safe-area-inset-bottom)_+_66px)] lg:bottom-6"
+        >
+          <div className="toast-in pointer-events-auto flex items-center gap-3 w-full max-w-sm px-4 py-3 rounded-lg bg-surface text-ink border border-hairline-strong shadow-s3">
+            <Check size={16} strokeWidth={2.5} className="shrink-0 text-success" />
+            <span className="flex-1 text-sm font-medium truncate">{toast.message}</span>
+            <button
+              onClick={undoTick}
+              className="shrink-0 text-sm font-semibold text-primary hover:underline"
+            >
+              Undo
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Regenerate confirmation ────────────────────────────── */}
+      <Modal open={confirmRegen} onClose={() => setConfirmRegen(false)} maxWidth="max-w-sm">
+        <div className="p-6">
+          <h2 className="text-xl font-semibold text-ink tracking-[-0.3px]">Replace this week?</h2>
+          <p className="mt-2 text-sm text-slate leading-relaxed">
+            The current plan will be overwritten with a fresh 7-day menu. This can't be undone.
+          </p>
+          <div className="mt-6 flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setConfirmRegen(false)}>Cancel</Button>
+            <Button onClick={confirmRegenerate}><Sparkles size={14} /> Regenerate</Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* ── Active meal modal ──────────────────────────────────── */}
       <Modal open={!!activeMeal && !!meals[activeMeal]} onClose={() => setActiveMeal(null)} maxWidth="max-w-2xl">
