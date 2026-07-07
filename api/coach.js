@@ -154,7 +154,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Request body is not valid JSON." });
     }
   }
-  const { messages, settings, meals } = body || {};
+  const { messages, settings, meals, pantry } = body || {};
 
   if (!Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: "'messages' must be a non-empty array." });
@@ -169,12 +169,24 @@ export default async function handler(req, res) {
     content: typeof m.content === "string" ? m.content : "",
   }));
 
-  // Inject the current week + targets as context into the first user turn
+  // The pantry lets the coach answer "what can I make with what I have?"
+  const pantryLines = Array.isArray(pantry)
+    ? pantry
+        .slice(0, 80)
+        .filter((p) => p && typeof p.item === "string")
+        .map((p) => `  - ${p.item}: ${p.qty} ${p.unit}`)
+        .join("\n")
+    : "";
+
+  // Inject the current week + targets + pantry as context into the first user turn
   const contextHeader = `CURRENT TARGETS:
   ${settings.kcalTarget} kcal, ${settings.proteinTarget}g protein, ${settings.carbsTarget}g carbs, ${settings.fatTarget}g fat (per day).
 
 CURRENT WEEK:
 ${summarizeWeek(meals || {})}
+
+WHAT'S IN THE PANTRY / FRIDGE RIGHT NOW (already bought — prefer using these when the user asks what to cook, and favor meals that consume them before they spoil):
+${pantryLines || "  (pantry is empty / not tracked)"}
 
 ---
 USER:

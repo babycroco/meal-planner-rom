@@ -32,19 +32,24 @@ async function callApi(endpoint, payload) {
   return data;
 }
 
-// Phase 1 of week generation: the chef designs the whole 7-day menu at once,
-// deliberately varied and anchored to the season. Returns
-// [{ day: "Mon", concept: "..." }, ...]. `ctx` carries month / location /
-// seasonalHint so the planner cooks for the right time of year and place.
-export async function planWeek(settings, ctx = {}) {
-  const { days } = await callApi("/api/generate-meals", {
+// Phase 1 of week generation: the chef designs the whole 7-day menu at once —
+// per-day concepts + breakfast/snack assignments + the week's ingredient
+// palette (so day generation can run in parallel with a tight cart).
+// `ctx` carries month / location / seasonalHint; `memory` carries
+// recentMeals / loved / banned; batchMode enables leftover chaining.
+export async function planWeek(settings, ctx = {}, memory = {}, batchMode = false) {
+  const { days, ingredientPalette } = await callApi("/api/generate-meals", {
     mode: "plan",
     settings,
+    batchMode,
+    recentMeals: memory.recentMeals || [],
+    lovedMeals: memory.loved || [],
+    bannedMeals: memory.banned || [],
     monthName: ctx.monthName || "",
     location: ctx.location || "",
     seasonalHint: ctx.seasonalHint || "",
   });
-  return days;
+  return { days, ingredientPalette: ingredientPalette || [] };
 }
 
 // Phase 2: generate one day's 4 meals, guided by that day's concept from the
@@ -61,6 +66,9 @@ export async function generateDay(day, settings, allowLongCook, existingNames, e
     concept: ctx.concept || "",
     breakfastIdea: ctx.breakfastIdea || "",
     snackIdea: ctx.snackIdea || "",
+    palette: ctx.palette || [],
+    otherDaysSummary: ctx.otherDaysSummary || "",
+    bannedMeals: ctx.bannedMeals || [],
     monthName: ctx.monthName || "",
     location: ctx.location || "",
     seasonalHint: ctx.seasonalHint || "",
@@ -84,6 +92,7 @@ export async function regenerateMeal(day, slot, settings, existingNames, ctx = {
 }
 
 // Send a Coach chat message — returns { reply, proposedChanges }.
-export async function coachMessage(messages, settings, meals) {
-  return await callApi("/api/coach", { messages, settings, meals });
+// Pantry is included so the coach can answer "what can I cook from what I have?"
+export async function coachMessage(messages, settings, meals, pantry = []) {
+  return await callApi("/api/coach", { messages, settings, meals, pantry });
 }

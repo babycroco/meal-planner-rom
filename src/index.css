@@ -262,6 +262,29 @@ button:hover > .check-pop {
   transform: translateX(3px);
 }
 
+/* Skeleton shimmer for pending day cards during parallel generation. */
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.shimmer-block {
+  background: linear-gradient(
+    90deg,
+    var(--surface-soft) 25%,
+    var(--hairline) 50%,
+    var(--surface-soft) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+.shimmer-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--primary);
+  animation: pulseSoft 1.2s ease-in-out infinite;
+}
+
 /* Respect users who prefer reduced motion — disable the entrance fade and any
    looping spinners rather than animating them. */
 @media (prefers-reduced-motion: reduce) {

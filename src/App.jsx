@@ -48,6 +48,7 @@ const DEFAULT_SETTINGS = {
   cuisines: "", // optional soft preference now — the chef mixes cuisines freely across the week
   avoid: "",
   location: "Berlin, Germany",
+  batchMode: true, // cook once, eat twice — dinners chain into next-day lunches
 };
 
 // Macro presets the user can switch between via the sidebar. Switching a
@@ -786,6 +787,64 @@ function DayCard({ dayIndex, day, isToday, kcal, protein, carbs, fat, meals, reg
   );
 }
 
+// Placeholder card shown while a day is still cooking during parallel
+// generation — surfaces the blueprint's concept so the wait is a menu
+// preview, not dead time.
+function PendingDayCard({ day, dayIndex, isToday, plan }) {
+  return (
+    <article
+      className="bg-canvas rounded-lg border border-dashed border-hairline-strong p-4 flex flex-col gap-3 pop-in"
+      style={{ animationDelay: `${dayIndex * 60}ms` }}
+      aria-label={`${day} — cooking`}
+    >
+      <header className="flex items-baseline justify-between gap-2 pb-2.5 border-b border-hairline-soft">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-lg font-semibold text-ink tracking-[-0.2px]">{day}</span>
+          {isToday && (
+            <span className="px-2 py-0.5 rounded-full bg-primary text-white text-[10px] font-semibold uppercase tracking-[0.08em] leading-none">
+              Today
+            </span>
+          )}
+        </div>
+        <Loader2 size={14} className="animate-spin text-primary shrink-0" />
+      </header>
+
+      {plan?.concept ? (
+        <div className="flex flex-col gap-2.5">
+          <div className="p-3 rounded-md bg-surface-soft">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-stone mb-1">
+              On the menu
+            </div>
+            <p className="text-[13px] leading-snug text-slate italic">{plan.concept}</p>
+          </div>
+          {plan.breakfastIdea && (
+            <div className="text-[11px] text-steel leading-snug">
+              <span className="font-semibold uppercase tracking-[0.08em] text-stone text-[10px]">Breakfast · </span>
+              {plan.breakfastIdea}
+            </div>
+          )}
+          {plan.snackIdea && (
+            <div className="text-[11px] text-steel leading-snug">
+              <span className="font-semibold uppercase tracking-[0.08em] text-stone text-[10px]">Snack · </span>
+              {plan.snackIdea}
+            </div>
+          )}
+          <div className="mt-1 flex items-center gap-1.5 text-[11px] text-stone">
+            <span className="shimmer-dot" />
+            cooking…
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="h-16 rounded-md shimmer-block" />
+          ))}
+        </div>
+      )}
+    </article>
+  );
+}
+
 function Modal({ open, onClose, children, maxWidth = "max-w-lg" }) {
   if (!open) return null;
   return (
@@ -931,6 +990,16 @@ export default function App() {
   const [activeProgramId, setActiveProgramId] = useState(() => load("activeProgram", "cut"));
   // Snapshot of the season the current week was cooked for — drives the chip.
   const [weekContext, setWeekContext] = useState(() => load("weekContext_v1", null));
+  // Transient: the blueprint for a week currently being generated — drives the
+  // concept placeholder cards while days cook in parallel. Not persisted.
+  const [weekPlan, setWeekPlan] = useState(null);
+  // Rolling meal-name history (last ~3 weeks) so regenerated weeks stay fresh.
+  const [mealHistory, setMealHistory] = useState(() => load("mealHistory_v1", []));
+  // ⭐ loved / 🚫 banned meal names — fed back into generation.
+  const [favorites, setFavorites] = useState(() => {
+    const f = load("favorites_v1", { loved: [], banned: [] });
+    return { loved: Array.isArray(f?.loved) ? f.loved : [], banned: Array.isArray(f?.banned) ? f.banned : [] };
+  });
   const [pantry, setPantry] = useState(() => consolidatePantry(load("pantry_v1", [])));
   const [pantryDraft, setPantryDraft] = useState(EMPTY_PANTRY_DRAFT);
   const [coachMessages, setCoachMessages] = useState(() => load("coachMessages_v1", []));
@@ -947,12 +1016,30 @@ export default function App() {
   const [transferMode, setTransferMode] = useState("export");
   const [importText, setImportText] = useState("");
   const [copyOk, setCopyOk] = useState(false);
+  const [listCopied, setListCopied] = useState(false);
 
   useEffect(() => { save("settings_v2", settings); }, [settings]);
   useEffect(() => { save("meals_v2", meals); }, [meals]);
   useEffect(() => { save("activeProgram", activeProgramId); }, [activeProgramId]);
   useEffect(() => { save("weekContext_v1", weekContext); }, [weekContext]);
+  useEffect(() => { save("mealHistory_v1", mealHistory); }, [mealHistory]);
+  useEffect(() => { save("favorites_v1", favorites); }, [favorites]);
   useEffect(() => { save("pantry_v1", pantry); }, [pantry]);
+
+  const toggleLoved = (name) => {
+    if (!name) return;
+    setFavorites((f) => ({
+      loved: f.loved.includes(name) ? f.loved.filter((n) => n !== name) : [...f.loved.slice(-39), name],
+      banned: f.banned.filter((n) => n !== name),
+    }));
+  };
+  const toggleBanned = (name) => {
+    if (!name) return;
+    setFavorites((f) => ({
+      loved: f.loved.filter((n) => n !== name),
+      banned: f.banned.includes(name) ? f.banned.filter((n) => n !== name) : [...f.banned.slice(-39), name],
+    }));
+  };
   useEffect(() => { save("coachMessages_v1", coachMessages); }, [coachMessages]);
 
   const sendCoachMessage = async (text) => {
@@ -969,6 +1056,7 @@ export default function App() {
         nextHistory.map((m) => ({ role: m.role, content: m.content })),
         settings,
         meals,
+        pantry,
       );
       setCoachMessages((prev) => [
         ...prev,
@@ -1093,57 +1181,92 @@ export default function App() {
     // nothing at all (transient failure), so a good week isn't lost on a hiccup.
     const prevMeals = meals;
     setMeals({});
+    setWeekPlan(null);
+    // Cross-week memory: what we ate recently (avoid), what's loved (may
+    // return), what's banned (never).
+    const memory = {
+      recentMeals: [...new Set(mealHistory.slice(-84).map((h) => h.name))],
+      loved: favorites.loved,
+      banned: favorites.banned,
+    };
     try {
-      // Phase 1 — the chef sketches the whole week's menu at once: a varied,
-      // seasonal blueprint with one culinary concept per day. Best-effort;
-      // if it fails we fall back to per-day generation without concepts.
-      const planByDay = {}; // day → { concept, breakfast, snack }
+      // Phase 1 — the chef sketches the whole week at once: per-day concepts,
+      // breakfast/snack assignments, and the week's ingredient palette. The
+      // palette is what lets phase 2 run all 7 days in PARALLEL while keeping
+      // the grocery cart tight. Best-effort; on failure we cook without it.
+      const planByDay = {};
+      let palette = [];
       try {
-        const blueprint = await apiPlanWeek(settings, ctx);
-        if (Array.isArray(blueprint)) {
-          for (const d of blueprint) {
-            if (d?.day) {
-              planByDay[d.day] = {
-                concept: d.concept || "",
-                breakfastIdea: d.breakfast || "",
-                snackIdea: d.snack || "",
-              };
-            }
+        const blueprint = await apiPlanWeek(settings, ctx, memory, !!settings.batchMode);
+        for (const d of blueprint?.days || []) {
+          if (d?.day) {
+            planByDay[d.day] = {
+              concept: d.concept || "",
+              breakfastIdea: d.breakfast || "",
+              snackIdea: d.snack || "",
+            };
           }
         }
+        palette = blueprint?.ingredientPalette || [];
+        if (Object.keys(planByDay).length > 0) setWeekPlan(planByDay);
       } catch (planErr) {
         console.warn("Week planning failed, generating without a blueprint:", planErr);
       }
 
-      // Phase 2 — cook each day to fulfil its concept, day by day, keeping
-      // ingredient names/units consistent across the week for a clean cart.
-      let longCookRemaining = settings.maxLongCookPerWeek;
-      const newMeals = {};
-      const usedNames = [];
-      const usedIngredients = new Map(); // canonical lowercase|unit → "{Item} ({unit})"
-      for (const day of DAYS) {
-        const isWeekend = day === "Sat" || day === "Sun";
-        const allowLongCook = isWeekend && longCookRemaining > 0;
-        const ingredientList = [...usedIngredients.values()];
-        const dayMeals = await generateDay(day, settings, allowLongCook, usedNames, ingredientList, {
-          ...ctx,
-          concept: planByDay[day]?.concept || "",
-          breakfastIdea: planByDay[day]?.breakfastIdea || "",
-          snackIdea: planByDay[day]?.snackIdea || "",
-        });
-        SLOTS.forEach((slot, i) => {
-          const meal = dayMeals[i];
-          newMeals[`${day}-${slot}`] = meal;
-          if (meal?.name) usedNames.push(meal.name);
-          if (meal?.prep_time === "60") longCookRemaining--;
-          for (const ing of meal?.ingredients || []) {
-            const k = `${canonicalName(ing.item).toLowerCase()}|${ing.unit || ""}`;
-            if (!usedIngredients.has(k)) {
-              usedIngredients.set(k, `${ing.item} (${ing.unit})`);
-            }
-          }
-        });
-        setMeals({ ...newMeals });
+      // Long-cook budget assigned deterministically (parallel days can't
+      // share a running counter): weekend dinners get it first.
+      const allowLongCookByDay = {
+        Sat: settings.maxLongCookPerWeek >= 1,
+        Sun: settings.maxLongCookPerWeek >= 2,
+      };
+
+      // Phase 2 — cook all 7 days in PARALLEL. Each day sees the palette
+      // (exact names+units) and the other days' concepts, so the week stays
+      // coherent without sequential threading. Grid fills as days land.
+      const collectedNames = [];
+      const results = await Promise.allSettled(
+        DAYS.map((day) => {
+          const otherDaysSummary = DAYS.filter((d) => d !== day)
+            .map((d) => (planByDay[d]?.concept ? `${d}: ${planByDay[d].concept}` : null))
+            .filter(Boolean)
+            .join(" | ");
+          return generateDay(day, settings, allowLongCookByDay[day] || false, [], [], {
+            ...ctx,
+            concept: planByDay[day]?.concept || "",
+            breakfastIdea: planByDay[day]?.breakfastIdea || "",
+            snackIdea: planByDay[day]?.snackIdea || "",
+            palette,
+            otherDaysSummary,
+            bannedMeals: memory.banned,
+          }).then((dayMeals) => {
+            setMeals((prev) => {
+              const next = { ...prev };
+              SLOTS.forEach((slot, i) => {
+                next[`${day}-${slot}`] = dayMeals[i];
+                if (dayMeals[i]?.name) collectedNames.push(dayMeals[i].name);
+              });
+              return next;
+            });
+            return day;
+          });
+        }),
+      );
+
+      const failedDays = DAYS.filter((_, i) => results[i].status === "rejected");
+      if (failedDays.length > 0 && failedDays.length < DAYS.length) {
+        setError(`${failedDays.join(", ")} didn't generate — hit Regenerate to fill the gaps.`);
+      } else if (failedDays.length === DAYS.length) {
+        throw new Error(results[0].reason?.message || "Generation failed. Try again.");
+      }
+
+      // Record what we cooked so future weeks avoid repeating it (~3 weeks).
+      if (collectedNames.length > 0) {
+        const now = Date.now();
+        setMealHistory((prev) =>
+          [...prev, ...collectedNames.map((name) => ({ name, at: now }))]
+            .filter((h) => now - (h.at || 0) < 28 * 24 * 3600 * 1000)
+            .slice(-120),
+        );
       }
       setWeekContext({
         monthName: season.monthName,
@@ -1157,6 +1280,7 @@ export default function App() {
       // back so a transient error doesn't leave the planner empty.
       setMeals((cur) => (Object.keys(cur).length ? cur : prevMeals));
     }
+    setWeekPlan(null);
     setLoading(false);
   };
 
@@ -1194,6 +1318,26 @@ export default function App() {
       setCopyOk(true);
       setTimeout(() => setCopyOk(false), 2000);
     } catch { setCopyOk(false); }
+  };
+
+  // Plain-text grocery list, aisle-grouped — paste into WhatsApp / Notes /
+  // any shopping app.
+  const copyGroceryList = async () => {
+    const lines = ["🛒 Grocery list — Meals", ""];
+    for (const { section, items } of groceryCategories) {
+      lines.push(`${section.toUpperCase()}`);
+      for (const it of items) {
+        lines.push(`  ☐ ${it.item} — ${it.qty} ${it.unit}`);
+      }
+      lines.push("");
+    }
+    try {
+      await navigator.clipboard.writeText(lines.join("\n").trim());
+      setListCopied(true);
+      setTimeout(() => setListCopied(false), 2000);
+    } catch {
+      setListCopied(false);
+    }
   };
 
   const selectAllInTextarea = (e) => {
@@ -1363,43 +1507,66 @@ export default function App() {
           </div>
         )}
 
-        {/* ── Initial loading (Plan view only) ─────────────────── */}
-        {view === "plan" && loading && !hasMeals && (
+        {/* ── Phase-1 loading: the chef is sketching the menu ──── */}
+        {view === "plan" && loading && !hasMeals && !weekPlan && (
           <div className="py-24 text-center fade-in">
             <Loader2 size={28} className="animate-spin text-primary mx-auto mb-4" />
-            <Eyebrow className="!text-slate">Composing the week</Eyebrow>
-            <p className="mt-2 text-xs text-stone">filling in day by day…</p>
+            <Eyebrow className="!text-slate">The chef is planning the menu</Eyebrow>
+            <p className="mt-2 text-xs text-stone">sketching seven days around what's in season…</p>
           </div>
         )}
 
-        {/* ── Plan view: 7 day cards, today first ──────────────── */}
-        {view === "plan" && hasMeals && (
+        {/* ── Plan view: 7 day cards, today first. While generating,
+               days that haven't landed yet show their blueprint concept. */}
+        {view === "plan" && (hasMeals || (loading && weekPlan)) && (
           <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
-            {orderedDays.map((day, di) => (
-              <DayCard
-                key={day}
-                dayIndex={di}
-                day={day}
-                isToday={day === todayName}
-                kcal={dayKcal(day)}
-                protein={dayProtein(day)}
-                carbs={dayCarbs(day)}
-                fat={dayFat(day)}
-                meals={meals}
-                regenKey={regenKey}
-                onOpenMeal={setActiveMeal}
-                onRegen={regenerateMeal}
-              />
-            ))}
+            {orderedDays.map((day, di) => {
+              const dayHasMeals = SLOTS.some((s) => meals[`${day}-${s}`]);
+              if (!dayHasMeals && loading) {
+                return (
+                  <PendingDayCard
+                    key={day}
+                    day={day}
+                    dayIndex={di}
+                    isToday={day === todayName}
+                    plan={weekPlan?.[day]}
+                  />
+                );
+              }
+              if (!dayHasMeals) return null;
+              return (
+                <DayCard
+                  key={day}
+                  dayIndex={di}
+                  day={day}
+                  isToday={day === todayName}
+                  kcal={dayKcal(day)}
+                  protein={dayProtein(day)}
+                  carbs={dayCarbs(day)}
+                  fat={dayFat(day)}
+                  meals={meals}
+                  regenKey={regenKey}
+                  onOpenMeal={setActiveMeal}
+                  onRegen={regenerateMeal}
+                />
+              );
+            })}
           </div>
         )}
 
         {/* ── Grocery view: consolidated by section ────────────── */}
         {view === "grocery" && hasMeals && (
           <div className="fade-in">
-            <p className="text-sm text-steel mb-5">
-              {groceryItemCount} {groceryItemCount === 1 ? "item" : "items"} · sorted by aisle
-            </p>
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+              <p className="text-sm text-steel">
+                {groceryItemCount} {groceryItemCount === 1 ? "item" : "items"} · sorted by aisle
+              </p>
+              {groceryItemCount > 0 && (
+                <Button variant="secondary" onClick={copyGroceryList} className="!py-2 !px-3.5 !text-xs">
+                  {listCopied ? <><Check size={13} /> Copied</> : <><Share2 size={13} /> Copy list</>}
+                </Button>
+              )}
+            </div>
 
             <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
               {groceryCategories.map(({ section, items }, si) => (
@@ -1741,6 +1908,41 @@ export default function App() {
               <Eyebrow className="!text-charcoal">Method</Eyebrow>
               <p className="mt-2 text-[15px] leading-relaxed text-slate">{meals[activeMeal].instructions}</p>
             </div>
+
+            {/* Feed the chef's memory: loved meals may return, banned never do. */}
+            <div className="mt-6 pt-4 border-t border-hairline-soft flex items-center gap-2">
+              {(() => {
+                const mealName = meals[activeMeal].name;
+                const isLoved = favorites.loved.includes(mealName);
+                const isBanned = favorites.banned.includes(mealName);
+                return (
+                  <>
+                    <button
+                      onClick={() => toggleLoved(mealName)}
+                      aria-pressed={isLoved}
+                      className={`btn-spring inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+                        isLoved
+                          ? "bg-tint-yellow border-transparent text-charcoal"
+                          : "bg-transparent border-hairline-strong text-slate hover:bg-surface-soft"
+                      }`}
+                    >
+                      <span aria-hidden>⭐</span> {isLoved ? "Loved — the chef may bring it back" : "Love it"}
+                    </button>
+                    <button
+                      onClick={() => toggleBanned(mealName)}
+                      aria-pressed={isBanned}
+                      className={`btn-spring inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+                        isBanned
+                          ? "bg-error-tint border-transparent text-error"
+                          : "bg-transparent border-hairline-strong text-slate hover:bg-surface-soft"
+                      }`}
+                    >
+                      <span aria-hidden>🚫</span> {isBanned ? "Banned — never again" : "Never again"}
+                    </button>
+                  </>
+                );
+              })()}
+            </div>
           </div>
         )}
       </Modal>
@@ -1875,6 +2077,23 @@ export default function App() {
               />
             </label>
             <div className="mt-1 text-[11px] text-stone">Meals over 30 min. Reserved for weekends.</div>
+          </div>
+
+          <div>
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={!!settings.batchMode}
+                onChange={(e) => setSettings((p) => ({ ...p, batchMode: e.target.checked }))}
+                className="mt-0.5 w-4 h-4 accent-[var(--primary)] cursor-pointer"
+              />
+              <span>
+                <Eyebrow className="!text-charcoal">Cook once, eat twice</Eyebrow>
+                <span className="block mt-1 text-[11px] text-stone leading-snug">
+                  2-3 dinners a week are scaled to yield leftovers that become the next day's ≤5-min lunch remix.
+                </span>
+              </span>
+            </label>
           </div>
 
           <div>

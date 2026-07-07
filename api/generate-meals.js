@@ -211,8 +211,14 @@ const PLAN_SCHEMA = {
         required: ["day", "concept", "breakfast", "snack"],
       },
     },
+    ingredientPalette: {
+      type: "array",
+      items: { type: "string" },
+      description:
+        "The week's consolidated shopping palette: every ingredient the 7 days will use, written as 'Canonical name (unit)' — e.g. 'Chicken breast (g)', 'Eggs (piece)', 'Olive oil (tbsp)'. 25-45 entries. Days are cooked from THIS list so the grocery cart stays tight.",
+    },
   },
-  required: ["days"],
+  required: ["days", "ingredientPalette"],
 };
 
 function slotTargets(settings, slot) {
@@ -233,12 +239,26 @@ function slotTargetLines(settings) {
 }
 
 // ── Mode: "plan" — the chef designs the whole week at once, deliberately
-// varied and seasonal, before any day is cooked.
-function planPrompt(settings) {
+// varied and seasonal, before any day is cooked. Emits both the per-day
+// blueprint AND the week's ingredient palette so the 7 day-cooks can run in
+// parallel while still producing a tight, dedup-friendly grocery cart.
+function planPrompt(settings, { batchMode = false, recentMeals = [], lovedMeals = [], bannedMeals = [] } = {}) {
   const prefs = settings.cuisines
     ? `\nThe eater especially enjoys these cuisines — weight toward them across the week, but don't be bound to them: ${settings.cuisines}.`
     : "";
   const avoid = settings.avoid ? `\nAVOID entirely (allergies / dislikes): ${settings.avoid}.` : "";
+  const leftovers = batchMode
+    ? `\nLEFTOVER STRATEGY (the eater has a newborn — cook once, eat twice): on 2-3 weekdays, design DINNER to intentionally yield leftovers that become the NEXT day's LUNCH as a fast ≤5-min remix (e.g. Tuesday's roast chicken with vegetables → Wednesday's chicken wrap; Sunday's beef stew → Monday's stew over fresh bulgur). Write this into BOTH days' concepts explicitly ("dinner scaled to yield lunch for tomorrow" / "lunch: quick remix of yesterday's [dish]"). Never chain leftovers off a Sunday-only long cook into the following week.`
+    : "";
+  const recent = recentMeals.length
+    ? `\nRECENTLY EATEN (past ~3 weeks — do NOT plan these dishes or near-identical variants again; the eater is bored of them): ${recentMeals.join(" | ")}.`
+    : "";
+  const loved = lovedMeals.length
+    ? `\nALL-TIME FAVORITES (the eater loved these — you MAY bring back at most 2 of them this week if they fit the season, ideally with a small twist): ${lovedMeals.join(" | ")}.`
+    : "";
+  const banned = bannedMeals.length
+    ? `\nBANNED (the eater rejected these — NEVER plan them or close variants): ${bannedMeals.join(" | ")}.`
+    : "";
   return `Design a varied, seasonal 7-day menu blueprint (Mon → Sun) for this eater.
 
 For EACH of the 7 days return FOUR things:
@@ -246,31 +266,54 @@ For EACH of the 7 days return FOUR things:
 - "breakfast": the breakfast FORMAT assigned to this day, picked from the breakfast idea bank in your instructions.
 - "snack": the snack assigned to this day, picked from the snack idea bank.
 
+Then return "ingredientPalette": the consolidated shopping list palette for the WHOLE week — every ingredient the 7 days will need, as 'Canonical name (unit)' strings using the canonical names and mandatory units from your instructions. Keep it tight (25-45 entries): reuse ingredients across days where it makes culinary sense so the shopping cart stays small, without flattening the variety.
+
 LUNCH/DINNER variety: deliberately VARY cuisine (travel the world — don't repeat a country two days running), primary protein (max 3 days each), technique, and format. Anchor every day to what's in season this month. No two days alike.
 
-BREAKFAST & SNACK variety — assign these UP FRONT so the week is varied by design, not by chance: lay out Mon→Sun and give each day a DISTINCT breakfast format and a DISTINCT snack, obeying the breakfast/snack rotation rules in your instructions (7 different breakfast formats, cooked breakfasts only Sat/Sun, spoon-family bowls/jars/parfaits capped, mix sweet & savory, rotate the protein base, never a sweet breakfast + sweet snack on the same day).${prefs}${avoid}
+BREAKFAST & SNACK variety — assign these UP FRONT so the week is varied by design, not by chance: lay out Mon→Sun and give each day a DISTINCT breakfast format and a DISTINCT snack, obeying the breakfast/snack rotation rules in your instructions (7 different breakfast formats, cooked breakfasts only Sat/Sun, spoon-family bowls/jars/parfaits capped, mix sweet & savory, rotate the protein base, never a sweet breakfast + sweet snack on the same day).${leftovers}${recent}${loved}${banned}${prefs}${avoid}
 
-Return exactly 7 entries in "days", one per day Mon..Sun, each with concept + breakfast + snack.`;
+Return exactly 7 entries in "days" (one per day Mon..Sun) plus the "ingredientPalette".`;
 }
 
-function dayPrompt(day, settings, allowLongCook, existingNames, existingIngredients = [], concept = "", breakfastIdea = "", snackIdea = "") {
+function dayPrompt(
+  day,
+  settings,
+  allowLongCook,
+  existingNames,
+  existingIngredients = [],
+  concept = "",
+  breakfastIdea = "",
+  snackIdea = "",
+  palette = [],
+  otherDaysSummary = "",
+  bannedMeals = [],
+) {
   const timeRule = allowLongCook
     ? 'TIME CONSTRAINT: At most ONE meal may be prep_time "60", and only dinner. Every other meal must be "5", "15", or "30".'
     : 'TIME CONSTRAINT: NO meal may be prep_time "60". Every meal must be "5", "15", or "30".';
   const conceptLine = concept
-    ? `\nTODAY'S LUNCH + DINNER CONCEPT (from the week's menu plan — build lunch and dinner around this): ${concept}`
+    ? `\nTODAY'S LUNCH + DINNER CONCEPT (from the week's menu plan — build lunch and dinner around this, including any leftover-remix notes it contains): ${concept}`
     : "";
   const breakfastLine = breakfastIdea
     ? `\nTODAY'S BREAKFAST (assigned by the menu plan — cook exactly this format, realised with fresh detail and on-target macros): ${breakfastIdea}`
-    : "\nBREAKFAST: pick a format from the breakfast idea bank that hasn't been used yet this week — favor a savory / hand-held / toast option over another dairy bowl.";
+    : "\nBREAKFAST: pick a format from the breakfast idea bank — favor a savory / hand-held / toast option over another dairy bowl.";
   const snackLine = snackIdea
     ? `\nTODAY'S SNACK (assigned by the menu plan): ${snackIdea}`
-    : "\nSNACK: pick from the snack idea bank, rotating sweet vs savory from the days already planned.";
+    : "\nSNACK: pick from the snack idea bank.";
+  const paletteLine = palette.length
+    ? `\nWEEK INGREDIENT PALETTE — today's meals must draw (near-)exclusively from this list, using the EXACT name and unit shown (this keeps the grocery cart tight): ${palette.join(", ")}. You may add 1-2 small extras only if a dish truly needs them.`
+    : "";
+  const othersLine = otherDaysSummary
+    ? `\nTHE REST OF THE WEEK'S MENU (for context — make today clearly DIFFERENT from these; different dishes, proteins, formats): ${otherDaysSummary}`
+    : "";
   const avoidRepeats = existingNames.length
     ? `\nAlready on this week's menu (make today clearly different — different dishes, proteins, and formats, not just a renamed version): ${existingNames.join(" | ")}.`
     : "";
   const reuseIngredients = existingIngredients.length
     ? `\nINGREDIENT CONSISTENCY: when today's meals reuse any of these ingredients, use the EXACT same name AND unit shown here (don't translate, don't add modifiers, don't change unit): ${existingIngredients.join(", ")}.`
+    : "";
+  const banned = bannedMeals.length
+    ? `\nBANNED dishes (the eater rejected these — NEVER serve them or close variants): ${bannedMeals.join(" | ")}.`
     : "";
   return `Cook a full day for ${day} — four slots: breakfast, lunch, dinner, snack.
 
@@ -279,7 +322,7 @@ DAILY TARGETS: ${settings.kcalTarget} kcal, ${settings.proteinTarget}g protein, 
 PER-SLOT TARGETS:
 ${slotTargetLines(settings)}
 
-${timeRule}${conceptLine}${breakfastLine}${snackLine}${avoidRepeats}${reuseIngredients}
+${timeRule}${conceptLine}${breakfastLine}${snackLine}${paletteLine}${othersLine}${avoidRepeats}${reuseIngredients}${banned}
 
 Return exactly 4 meals in "meals", in slot order: breakfast, lunch, dinner, snack.`;
 }
@@ -348,6 +391,12 @@ export default async function handler(req, res) {
     concept = "",
     breakfastIdea = "",
     snackIdea = "",
+    palette = [],
+    otherDaysSummary = "",
+    batchMode = false,
+    recentMeals = [],
+    lovedMeals = [],
+    bannedMeals = [],
     monthName = "",
     location = "",
     seasonalHint = "",
@@ -369,6 +418,13 @@ export default async function handler(req, res) {
   const ingredients = Array.isArray(existingIngredients)
     ? existingIngredients.filter((n) => typeof n === "string")
     : [];
+  const cleanStrings = (arr, cap) =>
+    Array.isArray(arr) ? arr.filter((n) => typeof n === "string").slice(0, cap) : [];
+  const paletteList = cleanStrings(palette, 60);
+  const recentList = cleanStrings(recentMeals, 90);
+  const lovedList = cleanStrings(lovedMeals, 40);
+  const bannedList = cleanStrings(bannedMeals, 40);
+  const othersText = typeof otherDaysSummary === "string" ? otherDaysSummary.slice(0, 4000) : "";
 
   const anthropic = new Anthropic({ apiKey });
 
@@ -376,15 +432,32 @@ export default async function handler(req, res) {
   const schema = mode === "plan" ? PLAN_SCHEMA : mode === "day" ? DAY_SCHEMA : MEAL_SCHEMA;
   const userContent =
     mode === "plan"
-      ? planPrompt(settings)
+      ? planPrompt(settings, {
+          batchMode: !!batchMode,
+          recentMeals: recentList,
+          lovedMeals: lovedList,
+          bannedMeals: bannedList,
+        })
       : mode === "day"
-        ? dayPrompt(day, settings, allowLongCook, names, ingredients, concept, breakfastIdea, snackIdea)
+        ? dayPrompt(
+            day,
+            settings,
+            allowLongCook,
+            names,
+            ingredients,
+            concept,
+            breakfastIdea,
+            snackIdea,
+            paletteList,
+            othersText,
+            bannedList,
+          )
         : mealPrompt(day, slot, settings, names);
 
   try {
     const message = await anthropic.messages.create({
       model: MODEL,
-      max_tokens: mode === "day" ? 4000 : mode === "plan" ? 2000 : 1500,
+      max_tokens: mode === "day" ? 4000 : mode === "plan" ? 3000 : 1500,
       thinking: { type: "disabled" },
       output_config: {
         format: { type: "json_schema", schema },
@@ -418,7 +491,10 @@ export default async function handler(req, res) {
       if (!Array.isArray(data.days) || data.days.length === 0) {
         return res.status(502).json({ error: "The planner returned no menu. Try again." });
       }
-      return res.status(200).json({ days: data.days });
+      return res.status(200).json({
+        days: data.days,
+        ingredientPalette: Array.isArray(data.ingredientPalette) ? data.ingredientPalette : [],
+      });
     }
     if (mode === "day") {
       if (!Array.isArray(data.meals) || data.meals.length !== 4) {
