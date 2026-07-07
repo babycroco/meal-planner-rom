@@ -68,7 +68,18 @@ const PROGRAM_BY_ID = Object.fromEntries(PROGRAMS.map((p) => [p.id, p]));
 // still logged to the console at each call site; only the user-facing text is
 // softened so backend/config messages (e.g. "APP_SECRET is not set") never
 // surface in the UI. Known-friendly transient messages pass through unchanged.
-const USER_SAFE_ERROR = [/try again/i, /network error/i, /paste a plan code/i, /invalid plan code/i];
+const USER_SAFE_ERROR = [
+  /try again/i,
+  /network error/i,
+  /paste a plan code/i,
+  /invalid plan code/i,
+  // Curated Anthropic-API-state messages from the serverless functions
+  // (api/_errors.js) — safe and specific, so show them verbatim.
+  /out of API credits/i,
+  /rejected the API key/i,
+  /rate-limited/i,
+  /overloaded/i,
+];
 function friendlyError(msg) {
   return typeof msg === "string" && USER_SAFE_ERROR.some((re) => re.test(msg))
     ? msg

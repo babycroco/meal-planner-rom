@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { anthropicUserError } from "./_errors.js";
 
 // Per-call generation runs one Anthropic call; 30s is ample headroom.
 export const config = { maxDuration: 30 };
@@ -567,9 +568,11 @@ export default async function handler(req, res) {
     return res.status(200).json({ meal: data });
   } catch (err) {
     if (err instanceof Anthropic.APIError) {
-      const status = err.status === 429 ? 429 : 502;
-      return res.status(status).json({ error: `Anthropic API error: ${err.message}` });
+      console.error("Anthropic API error:", err.status, err.message);
+      const { status, error } = anthropicUserError(err);
+      return res.status(status).json({ error });
     }
-    return res.status(500).json({ error: `Unexpected server error: ${err?.message || "unknown"}` });
+    console.error("Unexpected server error:", err?.message || err);
+    return res.status(500).json({ error: "Something went wrong on the server. Try again." });
   }
 }
